@@ -1,0 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-neutral-950: #0a0a0a;
+  --color-neutral-900: #161616;
+  --color-neutral-850: #0e0e0e;
+  --color-neutral-800: #1e1e1e;
+  --color-neutral-750: #121212;
+  --color-neutral-700: #262626;
+  
+  --color-cyan-500: #3b82f6; /* Elegant Dark uses beautiful premium blues instead of cyan */
+  --color-cyan-400: #60a5fa;
+  --color-cyan-600: #2563eb;
+  
+  --color-emerald-400: #34d399; /* emerald green */
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+}

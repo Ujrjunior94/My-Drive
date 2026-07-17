@@ -1,0 +1,6 @@
+{
+  "name": "DrivePilot AI",
+  "description": "Cockpit digital e painel inteligente de bordo com IA para motoristas de aplicativos controlarem faturamento, despesas, consumo e manutenção.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
