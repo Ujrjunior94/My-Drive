@@ -1,13 +1,37 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR" class="dark bg-neutral-950">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>DrivePilot AI — Cockpit Inteligente de Bordo</title>
+    
+    <!-- Meta tags do Web App & PWA -->
+    <meta name="description" content="Cockpit digital de telemetria, controle de ganhos e inteligência artificial para motoristas de aplicativo." />
+    <meta name="theme-color" content="#09090b" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="DrivePilot AI" />
+    <meta name="application-name" content="DrivePilot AI" />
+
+    <!-- Ícones e Manifest -->
+    <link rel="icon" type="image/svg+xml" href="/icon-192.svg" />
+    <link rel="apple-touch-icon" href="/icon-192.svg" />
+    <link rel="manifest" href="/manifest.json" />
   </head>
-  <body>
+  <body class="bg-neutral-950 text-neutral-100 antialiased selection:bg-cyan-500 selection:text-neutral-950">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Registro de Service Worker PWA -->
+    <script>
+      if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((reg) => console.log('[DrivePilot PWA] Service Worker registrado com sucesso:', reg.scope))
+            .catch((err) => console.warn('[DrivePilot PWA] Falha ao registrar Service Worker:', err));
+        });
+      }
+    </script>
   </body>
 </html>
-

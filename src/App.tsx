@@ -33,6 +33,7 @@ import AdvisorPanel from "./components/AdvisorPanel";
 import SettingsPanel from "./components/SettingsPanel";
 import RefuelsView from "./components/RefuelsView";
 import MaintenancesView from "./components/MaintenancesView";
+import PWAInstallBanner from "./components/PWAInstallBanner";
 
 export default function App() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -258,6 +259,8 @@ export default function App() {
               </span>
             </div>
 
+            <PWAInstallBanner compact={true} />
+
             <div className="w-[1px] h-6 bg-neutral-800" />
 
             <button
@@ -288,6 +291,8 @@ export default function App() {
 
           {/* Mobile menu trigger */}
           <div className="flex items-center gap-2 md:hidden">
+            <PWAInstallBanner compact={true} />
+
             <button
               id="mobile-new-journey-btn"
               onClick={() => {
@@ -598,7 +603,18 @@ export default function App() {
                 transition={{ duration: 0.2 }}
               >
                 {activeTab === "cockpit" && (
-                  <Dashboard journeys={journeys} settings={settings} loading={loading} />
+                  <>
+                    <PWAInstallBanner />
+                    <Dashboard
+                      journeys={journeys}
+                      settings={settings}
+                      loading={loading}
+                      userId={userId || "demo"}
+                      isDemo={isDemo}
+                      currentOdometer={currentOdometer}
+                      onNavigateTab={(tab) => setActiveTab(tab as any)}
+                    />
+                  </>
                 )}
                 {activeTab === "calendar" && (
                   <CalendarView

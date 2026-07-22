@@ -1,0 +1,52 @@
+{
+  "name": "DrivePilot AI — Cockpit Inteligente de Bordo",
+  "short_name": "DrivePilot AI",
+  "description": "Cockpit digital de telemetria e controle de ganhos com IA para motoristas de aplicativo.",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "orientation": "portrait",
+  "categories": ["utilities", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Novo Turno",
+      "short_name": "Início",
+      "description": "Lançar nova jornada de trabalho",
+      "url": "/?action=new_journey"
+    },
+    {
+      "name": "IA Assistente",
+      "short_name": "IA Bordo",
+      "description": "Consultar co-piloto com inteligência artificial",
+      "url": "/?tab=advisor"
+    }
+  ]
+}

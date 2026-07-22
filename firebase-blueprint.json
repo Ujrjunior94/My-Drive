@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and settings document",
+      "type": "object",
+      "properties": {
+        "settings": {
+          "type": "object",
+          "description": "Cockpit user settings and vehicle parameters"
+        }
+      }
+    },
+    "Journey": {
+      "title": "Journey",
+      "description": "Shift work log with telemetry and earnings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "date": { "type": "string" },
+        "startKm": { "type": "number" },
+        "endKm": { "type": "number" },
+        "totalKm": { "type": "number" }
+      },
+      "required": ["id", "userId", "date", "startKm", "endKm", "totalKm"]
+    },
+    "Refuel": {
+      "title": "Refuel",
+      "description": "Vehicle fuel refill transaction record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "date": { "type": "string" },
+        "value": { "type": "number" },
+        "liters": { "type": "number" },
+        "pricePerLiter": { "type": "number" }
+      },
+      "required": ["id", "userId", "date", "value", "liters"]
+    },
+    "Maintenance": {
+      "title": "Maintenance",
+      "description": "Vehicle maintenance service record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "date": { "type": "string" },
+        "type": { "type": "string" },
+        "cost": { "type": "number" }
+      },
+      "required": ["id", "userId", "date", "type", "cost"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User settings and metadata document"
+    },
+    "/users/{userId}/journeys/{journeyId}": {
+      "schema": "Journey",
+      "description": "Subcollection of work journeys per user"
+    },
+    "/users/{userId}/refuels/{refuelId}": {
+      "schema": "Refuel",
+      "description": "Subcollection of fuel logs per user"
+    },
+    "/users/{userId}/maintenances/{maintenanceId}": {
+      "schema": "Maintenance",
+      "description": "Subcollection of vehicle maintenance logs per user"
+    }
+  }
+}

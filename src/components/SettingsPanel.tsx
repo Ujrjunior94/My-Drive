@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { Settings, Save, Sparkles, Fuel, Target, User, DollarSign } from "lucide-react";
+import { Settings, Save, Sparkles, Fuel, Target, User, DollarSign, Smartphone } from "lucide-react";
 import { UserSettings } from "../types";
 import { motion } from "motion/react";
+import PWAInstallBanner from "./PWAInstallBanner";
 
 interface SettingsPanelProps {
   settings: UserSettings;
@@ -156,6 +157,11 @@ export default function SettingsPanel({ settings, onSave }: SettingsPanelProps) 
         </div>
 
       </form>
+
+      {/* INSTALAÇÃO PWA / MODO WEB */}
+      <div className="mt-8 pt-6 border-t border-neutral-800/80">
+        <PWAInstallBanner />
+      </div>
 
       {/* GUIA DE IDENTIDADE VISUAL & DESIGN SYSTEM MOCKUPS */}
       <div className="mt-8 pt-8 border-t border-neutral-800/80">

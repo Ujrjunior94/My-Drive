@@ -1,5 +1,6 @@
 import { collection, doc, getDocs, setDoc, deleteDoc, query, orderBy, getDoc } from "firebase/firestore";
 import { db } from "./firebase";
+import { handleFirestoreError, OperationType } from "./firestoreError";
 import { Journey, UserSettings, Refuel, Maintenance } from "../types";
 
 // Realistic Mock Data for Demo Mode based on current local time: July 2026
@@ -33,21 +34,31 @@ const DEMO_MAINTENANCES: Maintenance[] = [
     id: "maint-1",
     userId: "demo-user",
     date: "2026-06-10",
-    type: "Troca de Óleo e Filtro",
-    odometer: 120000,
+    type: "Troca de Óleo e Filtro Motor",
+    odometer: 116000,
     cost: 280.00,
-    nextOdometerCheck: 130000,
+    nextOdometerCheck: 126000,
     notes: "Óleo 5W30 sintético original"
   },
   {
     id: "maint-2",
+    userId: "demo-user",
+    date: "2026-05-20",
+    type: "Pastilhas de Freio Dianteiras ABS",
+    odometer: 115200,
+    cost: 320.00,
+    nextOdometerCheck: 125200,
+    notes: "Verificação e substituição do jogo de pastilhas Bosch"
+  },
+  {
+    id: "maint-3",
     userId: "demo-user",
     date: "2026-07-01",
     type: "Alinhamento e Balanceamento",
     odometer: 122500,
     cost: 150.00,
     nextOdometerCheck: 132500,
-    notes: "Direção desalinhada puxando para a direita"
+    notes: "Ajuste de convergência e balanceamento das rodas"
   }
 ];
 const DEMO_JOURNEYS: Journey[] = [
@@ -205,6 +216,7 @@ export const dbService = {
       return journeys;
     } catch (error) {
       console.error("Error fetching journeys from Firestore, falling back to local storage:", error);
+      handleFirestoreError(error, OperationType.LIST, `users/${userId}/journeys`);
       const stored = localStorage.getItem(`drive_analytics_journeys_${userId}`);
       return stored ? JSON.parse(stored) : [];
     }
@@ -242,6 +254,7 @@ export const dbService = {
       localStorage.setItem(`drive_analytics_journeys_${userId}`, JSON.stringify(journeys));
     } catch (error) {
       console.error("Error saving journey to Firestore:", error);
+      handleFirestoreError(error, OperationType.WRITE, `users/${userId}/journeys/${journey.id}`);
       throw error;
     }
   },
@@ -265,6 +278,7 @@ export const dbService = {
       localStorage.setItem(`drive_analytics_journeys_${userId}`, JSON.stringify(updated));
     } catch (error) {
       console.error("Error deleting journey from Firestore:", error);
+      handleFirestoreError(error, OperationType.DELETE, `users/${userId}/journeys/${journeyId}`);
       throw error;
     }
   },
@@ -285,6 +299,7 @@ export const dbService = {
       return DEFAULT_SETTINGS;
     } catch (error) {
       console.error("Error fetching user settings, falling back to local:", error);
+      handleFirestoreError(error, OperationType.GET, `users/${userId}`);
       const stored = localStorage.getItem(`drive_analytics_settings_${userId}`);
       return stored ? JSON.parse(stored) : DEFAULT_SETTINGS;
     }
@@ -303,6 +318,7 @@ export const dbService = {
       localStorage.setItem(`drive_analytics_settings_${userId}`, JSON.stringify(settings));
     } catch (error) {
       console.error("Error saving settings to Firestore:", error);
+      handleFirestoreError(error, OperationType.WRITE, `users/${userId}`);
       throw error;
     }
   },
@@ -332,6 +348,7 @@ export const dbService = {
       return res;
     } catch (error) {
       console.error("Error fetching refuels from Firestore", error);
+      handleFirestoreError(error, OperationType.LIST, `users/${userId}/refuels`);
       const stored = localStorage.getItem(`drivepilot_refuels_${userId}`);
       return stored ? JSON.parse(stored) : [];
     }
@@ -367,6 +384,7 @@ export const dbService = {
       localStorage.setItem(`drivepilot_refuels_${userId}`, JSON.stringify(list));
     } catch (error) {
       console.error("Error saving refuel to Firestore", error);
+      handleFirestoreError(error, OperationType.WRITE, `users/${userId}/refuels/${refuel.id}`);
       throw error;
     }
   },
@@ -389,6 +407,7 @@ export const dbService = {
       localStorage.setItem(`drivepilot_refuels_${userId}`, JSON.stringify(filtered));
     } catch (error) {
       console.error("Error deleting refuel", error);
+      handleFirestoreError(error, OperationType.DELETE, `users/${userId}/refuels/${refuelId}`);
       throw error;
     }
   },
@@ -418,6 +437,7 @@ export const dbService = {
       return res;
     } catch (error) {
       console.error("Error fetching maintenances from Firestore", error);
+      handleFirestoreError(error, OperationType.LIST, `users/${userId}/maintenances`);
       const stored = localStorage.getItem(`drivepilot_maintenances_${userId}`);
       return stored ? JSON.parse(stored) : [];
     }
@@ -453,6 +473,7 @@ export const dbService = {
       localStorage.setItem(`drivepilot_maintenances_${userId}`, JSON.stringify(list));
     } catch (error) {
       console.error("Error saving maintenance to Firestore", error);
+      handleFirestoreError(error, OperationType.WRITE, `users/${userId}/maintenances/${maintenance.id}`);
       throw error;
     }
   },
@@ -475,6 +496,7 @@ export const dbService = {
       localStorage.setItem(`drivepilot_maintenances_${userId}`, JSON.stringify(filtered));
     } catch (error) {
       console.error("Error deleting maintenance", error);
+      handleFirestoreError(error, OperationType.DELETE, `users/${userId}/maintenances/${maintenanceId}`);
       throw error;
     }
   }

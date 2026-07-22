@@ -3,6 +3,7 @@ import { Maintenance, UserSettings } from "../types";
 import { dbService } from "../lib/dbService";
 import { Plus, Trash2, Wrench, Calendar, Settings, AlertTriangle, AlertCircle, Check, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import Sandero3DRotation from "./Sandero3DRotation";
 
 const Skeleton = ({ className = "h-4 w-full" }: { className?: string }) => (
   <motion.div
@@ -154,6 +155,9 @@ export default function MaintenancesView({ userId, isDemo, settings, currentOdom
           <span>{showAddForm ? "Fechar Painel" : "Registrar Serviço"}</span>
         </button>
       </div>
+
+      {/* ANIMAÇÃO 3D RENAULT SANDERO PRATA GIRANDO */}
+      <Sandero3DRotation odometer={currentOdometer} />
 
       {/* Dynamic Alerts HUD */}
       {activeAlerts.length > 0 ? (

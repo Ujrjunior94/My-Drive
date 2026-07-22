@@ -15,7 +15,7 @@ async function startServer() {
   // API Route for Gemini Insights
   app.post("/api/insights", async (req, res) => {
     try {
-      const { journeys, driverName } = req.body;
+      const { journeys, driverName, projection } = req.body;
       
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
@@ -35,17 +35,31 @@ async function startServer() {
       const hasJourneys = journeys && journeys.length > 0;
       const dataStr = hasJourneys ? JSON.stringify(journeys, null, 2) : "Nenhuma jornada registrada ainda.";
 
+      let projectionStr = "";
+      if (projection) {
+        projectionStr = `
+PROJEÇÃO DE FATURAMENTO MENSAL (BASEADA NOS ÚLTIMOS 30 DIAS):
+- Média Diária dos Últimos 30 Dias (Geral): R$ ${Number(projection.dailyAvg30DaysCalendar || 0).toFixed(2)} / dia
+- Média por Dia Trabalhado (30 Dias): R$ ${Number(projection.dailyAvg30DaysWorked || 0).toFixed(2)} / dia rodado (${projection.workedDatesLast30 || 0} dias rodados nos últimos 30 dias)
+- Faturamento Acumulado no Mês Atual: R$ ${Number(projection.accumulatedGrossCurrentMonth || 0).toFixed(2)}
+- Dias Restantes no Mês: ${projection.remainingDays || 0} dias
+- Faturamento Total Projetado para o Fim do Mês: R$ ${Number(projection.projectedTotalGrossMonth || 0).toFixed(2)}
+`;
+      }
+
       const prompt = `Você é o co-piloto inteligente e assistente de IA pessoal do motorista de aplicativo ${driverName || "Motorista"}.
 Sua tarefa é analisar os dados de desempenho recentes das jornadas de trabalho do motorista e fornecer insights práticos, diretos e altamente motivacionais em português.
 
 Dados recentes das jornadas:
 ${dataStr}
+${projectionStr}
 
 Por favor, forneça uma análise estruturada contendo:
 1. **Resumo de Bordo**: Análise rápida da saúde financeira (lucro líquido e receita bruta).
-2. **Eficiência de Corrida**: Análise sobre o lucro por km e por hora (se houver dados suficientes) ou dicas de melhoria.
-3. **Plataformas**: Comentários sobre a divisão entre Uber, 99 e Outras.
-4. **Dica do Piloto (Economia)**: Dicas úteis de redução de gastos (ex: controle de pé, manutenção, rotas de abastecimento).
+2. **Projeção de Faturamento**: Comentários e avaliação da projeção estimada de faturamento para o final do mês com base nos últimos 30 dias. Avalie se o ritmo atual é sustentável ou precisa de ajustes.
+3. **Eficiência de Corrida**: Análise sobre o lucro por km e por hora (se houver dados suficientes) ou dicas de melhoria.
+4. **Plataformas**: Comentários sobre a divisão entre Uber, 99 e Outras.
+5. **Dica do Piloto (Economia)**: Dicas úteis de redução de gastos (ex: controle de pé, manutenção, rotas de abastecimento).
 
 Responda em formato Markdown amigável e direto. Use termos típicos de motoristas no Brasil (como "corrida dinâmica", "consumo", "pedágio", "lucro real", "etanol", "GNV").`;
 

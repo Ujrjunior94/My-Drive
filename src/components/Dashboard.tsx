@@ -1,6 +1,7 @@
-import React from "react";
-import { DollarSign, Trash2, Fuel, TrendingUp, Calendar, Zap, Clock, ShieldAlert, Sparkles, Navigation, Award, Download } from "lucide-react";
-import { Journey, UserSettings } from "../types";
+import React, { useState, useEffect } from "react";
+import { DollarSign, Trash2, Fuel, TrendingUp, Calendar, Zap, Clock, ShieldAlert, Sparkles, Navigation, Award, Download, Wrench, AlertTriangle, CheckCircle2, Bell, ChevronRight } from "lucide-react";
+import { Journey, UserSettings, Maintenance } from "../types";
+import { dbService } from "../lib/dbService";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from "recharts";
 import { motion } from "motion/react";
 
@@ -8,6 +9,10 @@ interface DashboardProps {
   journeys: Journey[];
   settings: UserSettings;
   loading?: boolean;
+  userId?: string;
+  isDemo?: boolean;
+  currentOdometer?: number;
+  onNavigateTab?: (tab: string) => void;
 }
 
 const Skeleton = ({ className = "h-4 w-full" }: { className?: string }) => (
@@ -18,7 +23,54 @@ const Skeleton = ({ className = "h-4 w-full" }: { className?: string }) => (
   />
 );
 
-export default function Dashboard({ journeys, settings, loading }: DashboardProps) {
+export default function Dashboard({ journeys, settings, loading, userId, isDemo, currentOdometer, onNavigateTab }: DashboardProps) {
+  const [maintenances, setMaintenances] = useState<Maintenance[]>([]);
+  const [maintenancesLoading, setMaintenancesLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadMaint = async () => {
+      try {
+        const list = await dbService.getMaintenances(userId || "demo", isDemo || false);
+        if (isMounted) setMaintenances(list);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (isMounted) setMaintenancesLoading(false);
+      }
+    };
+    loadMaint();
+    return () => { isMounted = false; };
+  }, [userId, isDemo]);
+
+  const calculatedOdometer = currentOdometer || (journeys.length > 0 ? Math.max(...journeys.map(j => j.endKm)) : 125460);
+
+  // Filter maintenances by urgency relative to currentOdometer
+  const maintenanceAlerts = maintenances.map(m => {
+    const nextKm = m.nextOdometerCheck || 0;
+    const diffKm = nextKm - calculatedOdometer;
+    const isOverdue = diffKm <= 0;
+    const isClose = diffKm > 0 && diffKm <= 1500;
+    const isApproaching = diffKm > 1500 && diffKm <= 3000;
+
+    return {
+      ...m,
+      diffKm,
+      isOverdue,
+      isClose,
+      isApproaching,
+      status: isOverdue ? "CRITICAL" : isClose ? "WARNING" : isApproaching ? "NOTICE" : "OK"
+    };
+  }).filter(m => m.status !== "OK");
+
+  // Sort alerts: CRITICAL first, then WARNING, then NOTICE
+  const sortedAlerts = [...maintenanceAlerts].sort((a, b) => {
+    const priority = { CRITICAL: 0, WARNING: 1, NOTICE: 2, OK: 3 };
+    return priority[a.status] - priority[b.status];
+  });
+
+  const overdueCount = sortedAlerts.filter(m => m.isOverdue).length;
+  const warningCount = sortedAlerts.filter(m => m.isClose).length;
   
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat("pt-BR", { style: "currency", currency: settings.currency || "BRL" }).format(val);
@@ -150,6 +202,186 @@ export default function Dashboard({ journeys, settings, loading }: DashboardProp
           </button>
         )}
       </div>
+
+      {/* VISUAL MAINTENANCE NOTIFICATIONS SYSTEM (OFICINA) */}
+      {!maintenancesLoading && (
+        <div id="dashboard-maintenance-notifications" className="space-y-3">
+          {sortedAlerts.length > 0 ? (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`rounded-2xl border p-5 shadow-xl transition-all relative overflow-hidden ${
+                overdueCount > 0
+                  ? "bg-gradient-to-r from-red-950/40 via-neutral-900 to-neutral-950 border-red-500/40 shadow-red-950/20"
+                  : "bg-gradient-to-r from-amber-950/30 via-neutral-900 to-neutral-950 border-amber-500/40 shadow-amber-950/20"
+              }`}
+            >
+              {/* Top Accent Line */}
+              <div
+                className={`absolute top-0 left-0 right-0 h-1 ${
+                  overdueCount > 0 ? "bg-red-500 animate-pulse" : "bg-amber-500"
+                }`}
+              />
+
+              {/* Banner Header */}
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-neutral-800/80">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
+                      overdueCount > 0
+                        ? "bg-red-500/20 border-red-500/40 text-red-400 animate-bounce"
+                        : "bg-amber-500/20 border-amber-500/40 text-amber-400 animate-pulse"
+                    }`}
+                  >
+                    {overdueCount > 0 ? (
+                      <AlertTriangle className="w-5 h-5" />
+                    ) : (
+                      <Wrench className="w-5 h-5" />
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-xs font-black font-mono tracking-wider uppercase text-neutral-100 flex items-center gap-2">
+                        <span>Alertas da Oficina e Manutenção Preventiva</span>
+                      </h3>
+                      {overdueCount > 0 && (
+                        <span className="px-2 py-0.5 bg-red-500/20 border border-red-500/40 text-red-400 text-[10px] font-mono font-bold rounded-full animate-pulse">
+                          {overdueCount} CRÍTICO(S) VENCIDO(S)
+                        </span>
+                      )}
+                      {warningCount > 0 && (
+                        <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 text-amber-400 text-[10px] font-mono font-bold rounded-full">
+                          {warningCount} PRÓXIMO(S) DO VENCIMENTO
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-neutral-400 mt-0.5 font-sans">
+                      Odômetro Atual do Veículo:{" "}
+                      <strong className="text-cyan-400 font-mono">
+                        {calculatedOdometer.toLocaleString("pt-BR")} KM
+                      </strong>{" "}
+                      &bull; Atenção aos prazos cadastrados na aba Oficina.
+                    </p>
+                  </div>
+                </div>
+
+                {onNavigateTab && (
+                  <button
+                    onClick={() => onNavigateTab("maintenances")}
+                    className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-neutral-950 font-black rounded-xl text-xs transition-all cursor-pointer shadow-lg shadow-cyan-500/10 shrink-0 self-start md:self-center"
+                  >
+                    <Wrench className="w-3.5 h-3.5" />
+                    <span>Gerenciar na Oficina</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Alert List Items */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
+                {sortedAlerts.map((item) => {
+                  const absDiff = Math.abs(item.diffKm);
+                  const maxRange = item.nextOdometerCheck - item.odometer || 10000;
+                  const elapsedKm = calculatedOdometer - item.odometer;
+                  const progressPct = Math.min(
+                    100,
+                    Math.max(0, (elapsedKm / maxRange) * 100)
+                  );
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-3.5 rounded-xl border flex flex-col justify-between gap-3 transition-all ${
+                        item.isOverdue
+                          ? "bg-red-950/30 border-red-500/40"
+                          : item.isClose
+                          ? "bg-amber-950/20 border-amber-500/40"
+                          : "bg-neutral-900 border-neutral-800"
+                      }`}
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="text-xs font-bold text-neutral-100 line-clamp-1">
+                            {item.type}
+                          </span>
+                          {item.isOverdue ? (
+                            <span className="px-2 py-0.5 bg-red-500/20 text-red-400 border border-red-500/30 text-[9px] font-mono font-bold rounded shrink-0 uppercase animate-pulse">
+                              Vencido há {absDiff.toLocaleString("pt-BR")} KM
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[9px] font-mono font-bold rounded shrink-0 uppercase">
+                              Faltam {absDiff.toLocaleString("pt-BR")} KM
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between text-[10px] font-mono text-neutral-400">
+                          <span>Revisado em: {item.odometer.toLocaleString("pt-BR")} KM</span>
+                          <span className="font-bold text-neutral-200">
+                            Prazo: {item.nextOdometerCheck.toLocaleString("pt-BR")} KM
+                          </span>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="w-full h-1.5 bg-neutral-950 rounded-full overflow-hidden border border-neutral-800 mt-1">
+                          <div
+                            className={`h-full transition-all duration-500 ${
+                              item.isOverdue
+                                ? "bg-red-500"
+                                : item.isClose
+                                ? "bg-amber-400"
+                                : "bg-cyan-400"
+                            }`}
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {item.notes && (
+                        <p className="text-[10px] text-neutral-400 italic line-clamp-1 border-t border-neutral-800/60 pt-1.5 mt-1">
+                          &ldquo;{item.notes}&rdquo;
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          ) : (
+            /* Healthy State: No Pending Maintenance Warnings */
+            <div className="bg-neutral-900/90 border border-neutral-800 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-xl">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-mono font-black text-neutral-200 uppercase tracking-wide">
+                    Sistemas de Oficina em Dia
+                  </h4>
+                  <p className="text-[11px] text-neutral-400 font-sans mt-0.5">
+                    Odômetro atual em{" "}
+                    <strong className="text-emerald-400 font-mono">
+                      {calculatedOdometer.toLocaleString("pt-BR")} KM
+                    </strong>
+                    . Nenhuma revisão preventiva pendente ou próxima do vencimento.
+                  </p>
+                </div>
+              </div>
+
+              {onNavigateTab && (
+                <button
+                  onClick={() => onNavigateTab("maintenances")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 font-bold rounded-xl text-xs transition-all cursor-pointer shrink-0"
+                >
+                  <Wrench className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Ver Histórico da Oficina</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 1. Cockpit Header KPI Banner */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
