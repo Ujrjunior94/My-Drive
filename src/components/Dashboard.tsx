@@ -124,6 +124,8 @@ export default function Dashboard({ journeys, settings, loading, userId, isDemo,
   };
 
   // 1. Calculate General Aggregates
+  const tankCapacity = settings.tankCapacityLiters || 50;
+  const sortedJourneysList = [...journeys].sort((a, b) => b.date.localeCompare(a.date));
   const totalGross = journeys.reduce((sum, j) => sum + j.metrics.grossEarnings, 0);
   const totalExpenses = journeys.reduce((sum, j) => sum + j.metrics.totalExpenses, 0);
   const totalNet = totalGross - totalExpenses;
@@ -654,6 +656,86 @@ export default function Dashboard({ journeys, settings, loading, userId, isDemo,
                 Custo de Combustível/KM
               </span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* FOLHA DE PONTO E TELEMETRIA DE TURNOS */}
+      {hasData && (
+        <div id="timesheet-telemetry-panel" className="bg-neutral-900 border border-neutral-800/80 rounded-2xl p-5 shadow-xl space-y-4 my-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold font-mono text-cyan-400 uppercase tracking-widest flex items-center gap-2">
+                <Clock className="w-4 h-4 text-cyan-400" />
+                Folha de Ponto e Telemetria de Turnos (Multi-Turno)
+              </h3>
+              <p className="text-xs text-neutral-400 mt-0.5 font-sans">
+                Registros de início/término de expediente, odometria inicial e final, volume de combustível consumido e lucro líquido por turno.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 bg-cyan-500/10 border border-cyan-500/30 rounded-lg text-xs font-mono font-bold text-cyan-300">
+                {journeys.length} Registros no Histórico
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left font-mono text-xs">
+              <thead>
+                <tr className="border-b border-neutral-800 text-[10px] text-neutral-500 uppercase tracking-wider">
+                  <th className="py-2.5 px-3">Data & Turno</th>
+                  <th className="py-2.5 px-3">Horário Ponto</th>
+                  <th className="py-2.5 px-3">Odômetro (KM)</th>
+                  <th className="py-2.5 px-3">Distância</th>
+                  <th className="py-2.5 px-3">Consumo Est.</th>
+                  <th className="py-2.5 px-3">Eficiência</th>
+                  <th className="py-2.5 px-3">Faturamento</th>
+                  <th className="py-2.5 px-3 text-right">Lucro Líquido</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-800/60 text-neutral-200">
+                {sortedJourneysList.slice(0, 10).map((j) => {
+                  const shiftTitle = j.shiftName || "Turno Padrão";
+                  const startLiters = ((j.startFuelLevel ?? 100) / 100) * tankCapacity;
+                  const endLiters = ((j.endFuelLevel ?? 50) / 100) * tankCapacity;
+                  const consumedLiters = Math.max(0, startLiters - endLiters);
+                  const kmL = consumedLiters > 0 ? j.totalKm / consumedLiters : 0;
+
+                  return (
+                    <tr key={j.id} className="hover:bg-neutral-950/50 transition-colors">
+                      <td className="py-3 px-3 font-sans">
+                        <div className="font-bold text-neutral-100">{j.date}</div>
+                        <div className="text-[10px] font-mono font-semibold text-cyan-400">{shiftTitle}</div>
+                      </td>
+                      <td className="py-3 px-3 text-neutral-300">
+                        {j.startTime} - {j.endTime}
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="text-neutral-400">{j.startKm.toLocaleString("pt-BR")}</span>
+                        <span className="text-neutral-600 mx-1">→</span>
+                        <span className="text-neutral-100 font-bold">{j.endKm.toLocaleString("pt-BR")}</span>
+                      </td>
+                      <td className="py-3 px-3 font-bold text-cyan-300">
+                        {j.totalKm} KM
+                      </td>
+                      <td className="py-3 px-3 text-amber-400">
+                        {consumedLiters.toFixed(1)} L <span className="text-[9px] text-neutral-500">({(j.startFuelLevel ?? 100) - (j.endFuelLevel ?? 50)}%)</span>
+                      </td>
+                      <td className="py-3 px-3 text-emerald-400">
+                        {kmL > 0 ? `${kmL.toFixed(1)} km/l` : "-"}
+                      </td>
+                      <td className="py-3 px-3 font-bold text-neutral-200">
+                        {formatCurrency(j.metrics.grossEarnings)}
+                      </td>
+                      <td className="py-3 px-3 text-right font-black text-emerald-400">
+                        {formatCurrency(j.metrics.netProfit)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

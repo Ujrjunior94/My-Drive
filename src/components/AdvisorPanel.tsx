@@ -26,6 +26,8 @@ export default function AdvisorPanel({ journeys, settings }: AdvisorPanelProps) 
   const [fuelTotalCost, setFuelTotalCost] = useState<string>("180.00");
   const [distanceKm, setDistanceKm] = useState<string>("350");
   const [fuelPricePerLiter, setFuelPricePerLiter] = useState<string>("5.85");
+  const [tankCapacityLiters, setTankCapacityLiters] = useState<string>(String(settings.tankCapacityLiters || 50));
+  const [currentFuelLiters, setCurrentFuelLiters] = useState<string>("15");
   const [fuelType, setFuelType] = useState<"gasolina" | "etanol" | "gnv" | "diesel">("gasolina");
   const [targetEconomyPct, setTargetEconomyPct] = useState<number>(10);
 
@@ -160,11 +162,20 @@ export default function AdvisorPanel({ journeys, settings }: AdvisorPanelProps) 
     const cost = parseFloat(fuelTotalCost) || 0;
     const dist = parseFloat(distanceKm) || 0;
     const price = parseFloat(fuelPricePerLiter) || 5.85;
+    const tankCap = parseFloat(tankCapacityLiters) || 50;
+    const currentFuel = parseFloat(currentFuelLiters) || 0;
 
     const costPerKm = dist > 0 ? cost / dist : 0;
     const litersConsumed = price > 0 ? cost / price : 0;
     const kmPerLiter = litersConsumed > 0 ? dist / litersConsumed : 0;
     const litersPer100Km = dist > 0 ? (litersConsumed / dist) * 100 : 0;
+
+    // Tank in Liters metrics
+    const missingLitersToFill = Math.max(0, tankCap - currentFuel);
+    const costToFillTank = missingLitersToFill * price;
+    const currentAutonomyKm = currentFuel * kmPerLiter;
+    const fullTankAutonomyKm = tankCap * kmPerLiter;
+    const fuelPercentageOfTank = tankCap > 0 ? (currentFuel / tankCap) * 100 : 0;
 
     // Fuel rating logic
     let ratingLabel = "Insuficiente";
@@ -232,6 +243,9 @@ export default function AdvisorPanel({ journeys, settings }: AdvisorPanelProps) 
 
     // Savings per 1,000 km driven
     const savingsPer1000Km = (costPerKm - targetCostPerKm) * 1000;
+    const litersSavedPer1000Km = (kmPerLiter > 0 && targetKmPerLiter > 0)
+      ? (1000 / kmPerLiter) - (1000 / targetKmPerLiter)
+      : 0;
 
     // Projected monthly driven km
     const monthlyKmEstimate = projection && projection.workedDatesLast30 > 0
@@ -244,6 +258,13 @@ export default function AdvisorPanel({ journeys, settings }: AdvisorPanelProps) 
       cost,
       dist,
       price,
+      tankCap,
+      currentFuel,
+      missingLitersToFill,
+      costToFillTank,
+      currentAutonomyKm,
+      fullTankAutonomyKm,
+      fuelPercentageOfTank,
       costPerKm,
       litersConsumed,
       kmPerLiter,
@@ -254,10 +275,11 @@ export default function AdvisorPanel({ journeys, settings }: AdvisorPanelProps) 
       targetCostPerKm,
       targetKmPerLiter,
       savingsPer1000Km,
+      litersSavedPer1000Km,
       monthlyKmEstimate,
       estimatedMonthlySavings
     };
-  }, [fuelTotalCost, distanceKm, fuelPricePerLiter, fuelType, targetEconomyPct, projection]);
+  }, [fuelTotalCost, distanceKm, fuelPricePerLiter, tankCapacityLiters, currentFuelLiters, fuelType, targetEconomyPct, projection]);
 
   const fetchInsights = async () => {
     if (!hasData) return;
@@ -575,13 +597,13 @@ export default function AdvisorPanel({ journeys, settings }: AdvisorPanelProps) 
             </div>
 
             {/* Inputs Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 my-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 my-5">
               
               {/* Input 1: Fuel Cost */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-mono font-bold text-neutral-300 uppercase flex items-center gap-1">
                   <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Gasto Total Combustível</span>
+                  <span>Gasto Total</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 font-mono text-xs font-bold">R$</span>
@@ -601,7 +623,7 @@ export default function AdvisorPanel({ journeys, settings }: AdvisorPanelProps) 
               <div className="space-y-1.5">
                 <label className="text-[11px] font-mono font-bold text-neutral-300 uppercase flex items-center gap-1">
                   <Gauge className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Km Percorridos</span>
+                  <span>Km Rodados</span>
                 </label>
                 <div className="relative">
                   <input
@@ -621,7 +643,7 @@ export default function AdvisorPanel({ journeys, settings }: AdvisorPanelProps) 
               <div className="space-y-1.5">
                 <label className="text-[11px] font-mono font-bold text-neutral-300 uppercase flex items-center gap-1">
                   <Droplet className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Preço/Litro ou m³</span>
+                  <span>Preço por Litro</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 font-mono text-xs font-bold">R$</span>
@@ -637,18 +659,58 @@ export default function AdvisorPanel({ journeys, settings }: AdvisorPanelProps) 
                 </div>
               </div>
 
-              {/* Input 4: Fuel Type */}
+              {/* Input 4: Tank Capacity in Liters */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-mono font-bold text-neutral-300 uppercase flex items-center gap-1">
+                  <Fuel className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Capacidade Tanque</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="1"
+                    min="5"
+                    value={tankCapacityLiters}
+                    onChange={(e) => setTankCapacityLiters(e.target.value)}
+                    placeholder="50"
+                    className="w-full bg-neutral-900 border border-neutral-800 focus:border-amber-500/80 rounded-xl px-3 py-2 text-xs font-mono font-bold text-neutral-100 outline-none transition-colors"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 font-mono text-xs font-bold">L</span>
+                </div>
+              </div>
+
+              {/* Input 5: Current Fuel Level in Liters */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-mono font-bold text-neutral-300 uppercase flex items-center gap-1">
+                  <Fuel className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Combustível Atual</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    value={currentFuelLiters}
+                    onChange={(e) => setCurrentFuelLiters(e.target.value)}
+                    placeholder="15"
+                    className="w-full bg-neutral-900 border border-neutral-800 focus:border-amber-500/80 rounded-xl px-3 py-2 text-xs font-mono font-bold text-neutral-100 outline-none transition-colors"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 font-mono text-xs font-bold">Litros</span>
+                </div>
+              </div>
+
+              {/* Input 6: Fuel Type */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-mono font-bold text-neutral-300 uppercase flex items-center gap-1">
                   <Wrench className="w-3.5 h-3.5 text-neutral-400" />
-                  <span>Combustível Utilizado</span>
+                  <span>Tipo Combustível</span>
                 </label>
                 <div className="grid grid-cols-2 gap-1 bg-neutral-900 p-1 border border-neutral-800 rounded-xl">
                   {(["gasolina", "etanol", "gnv", "diesel"] as const).map((type) => (
                     <button
                       key={type}
                       onClick={() => setFuelType(type)}
-                      className={`py-1 px-2 rounded-lg text-[10px] font-mono font-bold uppercase transition-all cursor-pointer ${
+                      className={`py-1 px-1.5 rounded-lg text-[9px] font-mono font-bold uppercase transition-all cursor-pointer ${
                         fuelType === type
                           ? "bg-amber-500 text-neutral-950 shadow"
                           : "text-neutral-400 hover:text-neutral-200"
@@ -660,6 +722,65 @@ export default function AdvisorPanel({ journeys, settings }: AdvisorPanelProps) 
                 </div>
               </div>
 
+            </div>
+
+            {/* Painel do Tanque e Autonomia em Litros (NOVA SEÇÃO DE TELEMETRIA DO TANQUE) */}
+            <div className="bg-neutral-900/90 border border-amber-500/20 rounded-xl p-4 my-4">
+              <div className="flex items-center justify-between mb-3 border-b border-neutral-800/80 pb-2">
+                <span className="text-xs font-mono font-bold uppercase text-amber-400 flex items-center gap-1.5">
+                  <Fuel className="w-4 h-4 text-amber-400" />
+                  Telemetria do Tanque em Litros & Autonomia de Bordo
+                </span>
+                <span className="text-[10px] font-mono text-neutral-400">
+                  Capacidade: <strong className="text-neutral-200">{fuelCalc.tankCap} L</strong>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-mono">
+                {/* Litros no Tanque */}
+                <div className="p-3 bg-neutral-950/70 border border-neutral-800 rounded-lg">
+                  <span className="text-neutral-500 text-[10px] uppercase font-bold block">Combustível no Tanque</span>
+                  <div className="text-lg font-black text-cyan-400 my-0.5">
+                    {fuelCalc.currentFuel.toFixed(1)} <span className="text-xs text-neutral-400 font-normal">Litros</span>
+                  </div>
+                  <span className="text-[10px] text-neutral-400">
+                    Ocupação: {fuelCalc.fuelPercentageOfTank.toFixed(0)}% do tanque
+                  </span>
+                </div>
+
+                {/* Litros Faltantes para Completar */}
+                <div className="p-3 bg-neutral-950/70 border border-neutral-800 rounded-lg">
+                  <span className="text-neutral-500 text-[10px] uppercase font-bold block">Falta para Completar</span>
+                  <div className="text-lg font-black text-amber-400 my-0.5">
+                    {fuelCalc.missingLitersToFill.toFixed(1)} <span className="text-xs text-neutral-400 font-normal">Litros</span>
+                  </div>
+                  <span className="text-[10px] text-emerald-400">
+                    Custo para encher: {formatCurrency(fuelCalc.costToFillTank)}
+                  </span>
+                </div>
+
+                {/* Autonomia Atual com Litros no Tanque */}
+                <div className="p-3 bg-neutral-950/70 border border-neutral-800 rounded-lg">
+                  <span className="text-neutral-500 text-[10px] uppercase font-bold block">Autonomia Atual Estimada</span>
+                  <div className="text-lg font-black text-emerald-400 my-0.5">
+                    ~{fuelCalc.currentAutonomyKm.toFixed(0)} <span className="text-xs text-neutral-400 font-normal">KM</span>
+                  </div>
+                  <span className="text-[10px] text-neutral-400">
+                    Com base no consumo de {fuelCalc.kmPerLiter.toFixed(2)} km/L
+                  </span>
+                </div>
+
+                {/* Autonomia Máxima Tanque Cheio */}
+                <div className="p-3 bg-neutral-950/70 border border-neutral-800 rounded-lg">
+                  <span className="text-neutral-500 text-[10px] uppercase font-bold block">Autonomia Tanque Cheio</span>
+                  <div className="text-lg font-black text-neutral-200 my-0.5">
+                    ~{fuelCalc.fullTankAutonomyKm.toFixed(0)} <span className="text-xs text-neutral-400 font-normal">KM</span>
+                  </div>
+                  <span className="text-[10px] text-neutral-400">
+                    {fuelCalc.tankCap} Litros × {fuelCalc.kmPerLiter.toFixed(2)} km/L
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* Calculated Results Banner */}

@@ -8,6 +8,7 @@ interface JourneyFormProps {
   isDemo: boolean;
   selectedDate: string;
   editingJourney: Journey | null;
+  allJourneys?: Journey[];
   settings: UserSettings;
   onSave: (journey: Journey) => void;
   onDelete: (journeyId: string) => void;
@@ -19,6 +20,7 @@ export default function JourneyForm({
   isDemo,
   selectedDate,
   editingJourney,
+  allJourneys = [],
   settings,
   onSave,
   onDelete,
@@ -27,10 +29,15 @@ export default function JourneyForm({
   const [date, setDate] = useState(selectedDate);
   const [startTime, setStartTime] = useState("07:00");
   const [endTime, setEndTime] = useState("16:00");
+  const [shiftName, setShiftName] = useState("Turno 1 - Manhã");
+  const tankCapacity = settings.tankCapacityLiters || 50;
+
   const [startKm, setStartKm] = useState<number>(0);
   const [endKm, setEndKm] = useState<number>(0);
   const [startFuel, setStartFuel] = useState<number>(100);
   const [endFuel, setEndFuel] = useState<number>(50);
+  const [startFuelLiters, setStartFuelLiters] = useState<number>(tankCapacity);
+  const [endFuelLiters, setEndFuelLiters] = useState<number>(tankCapacity / 2);
 
   // Earnings
   const [uberEarn, setUberEarn] = useState<number>(0);
@@ -46,16 +53,23 @@ export default function JourneyForm({
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
 
-  // Initialize fields if editing
+  // Synchronize percentage, liters and auto-fill last odometer when creating a new turn/shift
   useEffect(() => {
     if (editingJourney) {
       setDate(editingJourney.date);
       setStartTime(editingJourney.startTime);
       setEndTime(editingJourney.endTime);
+      setShiftName(editingJourney.shiftName || "Turno 1 - Manhã");
       setStartKm(editingJourney.startKm);
       setEndKm(editingJourney.endKm);
-      setStartFuel(editingJourney.startFuelLevel);
-      setEndFuel(editingJourney.endFuelLevel);
+      
+      const sFuel = editingJourney.startFuelLevel ?? 100;
+      const eFuel = editingJourney.endFuelLevel ?? 50;
+      setStartFuel(sFuel);
+      setEndFuel(eFuel);
+      setStartFuelLiters(Number(((sFuel / 100) * tankCapacity).toFixed(1)));
+      setEndFuelLiters(Number(((eFuel / 100) * tankCapacity).toFixed(1)));
+
       setUberEarn(editingJourney.earnings.uber);
       setEarn99(editingJourney.earnings["99"]);
       setOthersEarn(editingJourney.earnings.others);
@@ -65,14 +79,42 @@ export default function JourneyForm({
       setOthersExp(editingJourney.expenses.others);
       setNotes(editingJourney.notes);
     } else {
-      // Setup some default KMs based on previous records if any (done via props if needed, otherwise start empty)
       setDate(selectedDate);
-      setStartTime("07:00");
-      setEndTime("16:00");
-      setStartKm(0);
-      setEndKm(0);
+      
+      // Calculate shifts existing on this selected date
+      const sameDayJourneys = allJourneys.filter(j => j.date === selectedDate);
+      const turnCount = sameDayJourneys.length;
+
+      let suggestedStart = 0;
+      if (allJourneys.length > 0) {
+        // Find highest endKm from all journeys
+        suggestedStart = Math.max(...allJourneys.map(j => j.endKm || 0));
+      }
+
+      if (turnCount === 0) {
+        setShiftName("Turno 1 - Manhã");
+        setStartTime("07:00");
+        setEndTime("12:00");
+      } else if (turnCount === 1) {
+        setShiftName("Turno 2 - Tarde");
+        setStartTime("12:30");
+        setEndTime("17:30");
+      } else if (turnCount === 2) {
+        setShiftName("Turno 3 - Noite");
+        setStartTime("18:00");
+        setEndTime("23:00");
+      } else {
+        setShiftName(`Turno Extra #${turnCount + 1}`);
+        setStartTime("22:00");
+        setEndTime("04:00");
+      }
+
+      setStartKm(suggestedStart);
+      setEndKm(suggestedStart ? suggestedStart + 100 : 0);
       setStartFuel(100);
       setEndFuel(50);
+      setStartFuelLiters(tankCapacity);
+      setEndFuelLiters(Number((tankCapacity / 2).toFixed(1)));
       setUberEarn(0);
       setEarn99(0);
       setOthersEarn(0);
@@ -82,10 +124,34 @@ export default function JourneyForm({
       setOthersExp(0);
       setNotes("");
     }
-  }, [editingJourney, selectedDate]);
+  }, [editingJourney, selectedDate, tankCapacity, allJourneys]);
+
+  const handleStartLitersChange = (liters: number) => {
+    const validLiters = Math.max(0, Math.min(tankCapacity, liters));
+    setStartFuelLiters(validLiters);
+    setStartFuel(Math.round((validLiters / tankCapacity) * 100));
+  };
+
+  const handleEndLitersChange = (liters: number) => {
+    const validLiters = Math.max(0, Math.min(tankCapacity, liters));
+    setEndFuelLiters(validLiters);
+    setEndFuel(Math.round((validLiters / tankCapacity) * 100));
+  };
+
+  const handleStartFuelPctChange = (pct: number) => {
+    setStartFuel(pct);
+    setStartFuelLiters(Number(((pct / 100) * tankCapacity).toFixed(1)));
+  };
+
+  const handleEndFuelPctChange = (pct: number) => {
+    setEndFuel(pct);
+    setEndFuelLiters(Number(((pct / 100) * tankCapacity).toFixed(1)));
+  };
 
   // Derived Calculations
   const totalKm = Math.max(0, endKm - startKm);
+  const consumedLiters = Math.max(0, startFuelLiters - endFuelLiters);
+  const journeyKmL = consumedLiters > 0 && totalKm > 0 ? totalKm / consumedLiters : 0;
 
   // Calculate worked hours
   const calculateHours = () => {
@@ -137,6 +203,7 @@ export default function JourneyForm({
       date,
       startTime,
       endTime,
+      shiftName,
       startKm,
       endKm,
       totalKm,
@@ -217,11 +284,16 @@ export default function JourneyForm({
         {/* Core telemetry widgets (Grid) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           
-          {/* Day & Time Selection */}
+          {/* Day, Time & Shift Selection (Folha de Ponto) */}
           <div className="bg-neutral-950/60 border border-neutral-800/60 p-4 rounded-xl space-y-3">
-            <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider font-mono flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-              Tempo & Escala
+            <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider font-mono flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                Tempo & Folha de Ponto
+              </span>
+              <span className="text-[9px] text-amber-400 font-bold bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                Multi-Turno / Dia
+              </span>
             </span>
             
             <div>
@@ -236,9 +308,41 @@ export default function JourneyForm({
               />
             </div>
 
+            <div>
+              <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1 font-mono flex items-center gap-1">
+                <Clock className="w-3 h-3 text-cyan-400" />
+                Identificador do Turno / Ponto
+              </label>
+              <input
+                id="journey-shift-name"
+                type="text"
+                required
+                value={shiftName}
+                onChange={(e) => setShiftName(e.target.value)}
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-lg p-2 text-xs font-mono font-bold text-cyan-300 focus:outline-none focus:border-cyan-500/50"
+                placeholder="Ex: Turno 1 - Manhã"
+              />
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {(["Turno 1 - Manhã", "Turno 2 - Tarde", "Turno 3 - Noite", "Turno Madrugada", "Turno Extra"] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setShiftName(s)}
+                    className={`text-[9px] font-mono px-1.5 py-0.5 rounded cursor-pointer transition-colors ${
+                      shiftName === s
+                        ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                        : "bg-neutral-900 text-neutral-400 hover:text-neutral-200 border border-neutral-800"
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1 font-mono">Início</label>
+                <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1 font-mono">Hora Início</label>
                 <input
                   id="journey-start-time"
                   type="time"
@@ -249,7 +353,7 @@ export default function JourneyForm({
                 />
               </div>
               <div>
-                <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1 font-mono">Término</label>
+                <label className="block text-[10px] text-neutral-400 uppercase tracking-wider mb-1 font-mono">Hora Término</label>
                 <input
                   id="journey-end-time"
                   type="time"
@@ -305,18 +409,36 @@ export default function JourneyForm({
             </div>
           </div>
 
-          {/* Fuel Level Dashboard Slider */}
+          {/* Fuel Level Dashboard Slider & Liters Input */}
           <div className="bg-neutral-950/60 border border-neutral-800/60 p-4 rounded-xl space-y-3 flex flex-col justify-between">
-            <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider font-mono flex items-center gap-1">
-              <Gauge className="w-3.5 h-3.5 text-cyan-400" />
-              Nível do Combustível
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider font-mono flex items-center gap-1">
+                <Gauge className="w-3.5 h-3.5 text-cyan-400" />
+                Tanque & Combustível
+              </span>
+              <span className="text-[9px] font-mono text-neutral-400">
+                Tanque: <strong className="text-neutral-200">{tankCapacity} L</strong>
+              </span>
+            </div>
 
-            <div className="space-y-3.5">
-              <div>
-                <div className="flex justify-between text-[10px] font-mono text-neutral-400 mb-1">
-                  <span>Partida:</span>
-                  <span className="text-emerald-400 font-bold">{startFuel}%</span>
+            <div className="space-y-3">
+              {/* Start Fuel in Liters & % */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-[10px] font-mono">
+                  <span className="text-neutral-400">Partida:</span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max={tankCapacity}
+                      value={startFuelLiters}
+                      onChange={(e) => handleStartLitersChange(Number(e.target.value))}
+                      className="w-16 bg-neutral-900 border border-neutral-800 text-emerald-400 font-bold px-1.5 py-0.5 text-right rounded font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                    <span className="text-neutral-400 font-bold">L</span>
+                    <span className="text-neutral-500 text-[9px]">({startFuel}%)</span>
+                  </div>
                 </div>
                 <input
                   id="start-fuel-slider"
@@ -324,15 +446,28 @@ export default function JourneyForm({
                   min="0"
                   max="100"
                   value={startFuel}
-                  onChange={(e) => setStartFuel(Number(e.target.value))}
+                  onChange={(e) => handleStartFuelPctChange(Number(e.target.value))}
                   className="w-full h-1 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
                 />
               </div>
 
-              <div>
-                <div className="flex justify-between text-[10px] font-mono text-neutral-400 mb-1">
-                  <span>Retorno:</span>
-                  <span className="text-cyan-400 font-bold">{endFuel}%</span>
+              {/* End Fuel in Liters & % */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-[10px] font-mono">
+                  <span className="text-neutral-400">Retorno:</span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max={tankCapacity}
+                      value={endFuelLiters}
+                      onChange={(e) => handleEndLitersChange(Number(e.target.value))}
+                      className="w-16 bg-neutral-900 border border-neutral-800 text-cyan-400 font-bold px-1.5 py-0.5 text-right rounded font-mono focus:outline-none focus:border-cyan-500"
+                    />
+                    <span className="text-neutral-400 font-bold">L</span>
+                    <span className="text-neutral-500 text-[9px]">({endFuel}%)</span>
+                  </div>
                 </div>
                 <input
                   id="end-fuel-slider"
@@ -340,14 +475,17 @@ export default function JourneyForm({
                   min="0"
                   max="100"
                   value={endFuel}
-                  onChange={(e) => setEndFuel(Number(e.target.value))}
+                  onChange={(e) => handleEndFuelPctChange(Number(e.target.value))}
                   className="w-full h-1 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
                 />
               </div>
             </div>
 
-            <div className="text-[10px] text-neutral-500 font-mono text-right uppercase">
-              Consumido: <span className="text-neutral-300 font-bold">{Math.max(0, startFuel - endFuel)}% do tanque</span>
+            <div className="text-[10px] text-neutral-400 font-mono flex items-center justify-between border-t border-neutral-800/60 pt-2">
+              <span>Consumido: <strong className="text-neutral-100">{consumedLiters.toFixed(1)} L</strong> ({Math.max(0, startFuel - endFuel)}%)</span>
+              {journeyKmL > 0 && (
+                <span className="text-emerald-400 font-bold">{journeyKmL.toFixed(2)} km/L</span>
+              )}
             </div>
           </div>
 

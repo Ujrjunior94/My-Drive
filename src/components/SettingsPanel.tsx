@@ -1,8 +1,25 @@
 import React, { useState } from "react";
-import { Settings, Save, Sparkles, Fuel, Target, User, DollarSign, Smartphone } from "lucide-react";
-import { UserSettings } from "../types";
+import { Settings, Save, Sparkles, Fuel, Target, User, DollarSign, Smartphone, Car, Gauge, Wrench, Check, Zap } from "lucide-react";
+import { UserSettings, VehicleSpecs } from "../types";
 import { motion } from "motion/react";
 import PWAInstallBanner from "./PWAInstallBanner";
+
+export const RENAULT_SANDERO_2013_SPECS: VehicleSpecs = {
+  modelName: "Renault Sandero 2013 1.0 Expression",
+  engine: "1.0 16V Hi-Flex (D4D) - 4 Cilindros",
+  powerHp: "77 cv (Etanol) / 76 cv (Gasolina) @ 5.850 rpm",
+  torqueKgfm: "10,1 kgfm (Etanol) / 9,9 kgfm (Gasolina) @ 4.250 rpm",
+  tankCapacityLiters: 50,
+  trunkCapacityLiters: 320,
+  factoryConsumptionEtanolUrban: 8.1,
+  factoryConsumptionEtanolHighway: 9.2,
+  factoryConsumptionGasolinaUrban: 12.1,
+  factoryConsumptionGasolinaHighway: 13.0,
+  recommendedTirePressure: "29 PSI dianteira / 29 PSI traseira (32 PSI com carga)",
+  tireSize: "185/65 R15",
+  topSpeedKmH: 161,
+  accel0to100: 14.1
+};
 
 interface SettingsPanelProps {
   settings: UserSettings;
@@ -14,7 +31,19 @@ export default function SettingsPanel({ settings, onSave }: SettingsPanelProps) 
   const [targetDailyProfit, setTargetDailyProfit] = useState(settings.targetDailyProfit || 250);
   const [fuelType, setFuelType] = useState(settings.fuelType || "Flex (Etanol/Gasolina)");
   const [currency, setCurrency] = useState(settings.currency || "BRL");
+  const [tankCapacityLiters, setTankCapacityLiters] = useState(settings.tankCapacityLiters || 50);
+  const [vehicleSpecs, setVehicleSpecs] = useState<VehicleSpecs | undefined>(
+    settings.vehicleSpecs || RENAULT_SANDERO_2013_SPECS
+  );
   const [saved, setSaved] = useState(false);
+
+  const handleApplySanderoPreset = () => {
+    setTankCapacityLiters(50);
+    setFuelType("Flex (Etanol/Gasolina)");
+    setVehicleSpecs(RENAULT_SANDERO_2013_SPECS);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +53,9 @@ export default function SettingsPanel({ settings, onSave }: SettingsPanelProps) 
       displayName,
       targetDailyProfit: Number(targetDailyProfit),
       fuelType,
-      currency
+      currency,
+      tankCapacityLiters: Number(tankCapacityLiters) || 50,
+      vehicleSpecs
     });
 
     setSaved(true);
@@ -112,6 +143,33 @@ export default function SettingsPanel({ settings, onSave }: SettingsPanelProps) 
             </select>
           </div>
 
+          {/* Tank Capacity in Liters */}
+          <div>
+            <label className="block text-xs font-medium text-neutral-400 mb-1.5 uppercase tracking-wider font-mono flex items-center gap-1.5">
+              <Fuel className="w-3.5 h-3.5 text-amber-400" />
+              Capacidade do Tanque (em Litros)
+            </label>
+            <div className="relative">
+              <input
+                id="settings-tank-capacity"
+                type="number"
+                required
+                min="5"
+                max="300"
+                value={tankCapacityLiters}
+                onChange={(e) => setTankCapacityLiters(Number(e.target.value))}
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl py-2.5 pl-4 pr-12 text-sm font-mono text-neutral-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20"
+                placeholder="Ex: 50"
+              />
+              <span className="absolute inset-y-0 right-0 flex items-center pr-4 text-xs font-mono font-bold text-neutral-500">
+                Litros
+              </span>
+            </div>
+            <span className="text-[10px] text-neutral-500 mt-1 block">
+              Usado para os cálculos de autonomia, volume de abastecimento e telemetria de consumo.
+            </span>
+          </div>
+
           {/* Currency format */}
           <div>
             <label className="block text-xs font-medium text-neutral-400 mb-1.5 uppercase tracking-wider font-mono flex items-center gap-1.5">
@@ -146,17 +204,83 @@ export default function SettingsPanel({ settings, onSave }: SettingsPanelProps) 
             )}
           </div>
 
-          <button
-            type="submit"
-            id="settings-save-btn"
-            className="flex items-center gap-1.5 px-6 py-2.5 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-neutral-900 font-bold rounded-xl text-xs transition-all shadow-md shadow-cyan-500/10 cursor-pointer"
-          >
-            <Save className="w-4 h-4" />
-            <span>Salvar Preferências</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleApplySanderoPreset}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl text-xs font-mono font-bold text-amber-400 hover:text-amber-300 transition-all cursor-pointer"
+              title="Carrega 50L de Tanque e Ficha Técnica de Fábrica do Sandero 2013 1.0 Expression"
+            >
+              <Car className="w-4 h-4" />
+              <span>Ativar Preset Sandero 2013 1.0</span>
+            </button>
+
+            <button
+              type="submit"
+              id="settings-save-btn"
+              className="flex items-center gap-1.5 px-6 py-2.5 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-neutral-900 font-bold rounded-xl text-xs transition-all shadow-md shadow-cyan-500/10 cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              <span>Salvar Preferências</span>
+            </button>
+          </div>
         </div>
 
       </form>
+
+      {/* FICHA TÉCNICA DE FÁBRICA DO VEÍCULO (RENAULT SANDERO 2013 1.0 EXPRESSION) */}
+      <div className="mt-8 pt-6 border-t border-neutral-800/80">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-bold font-mono text-amber-400 uppercase tracking-widest flex items-center gap-2">
+              <Car className="w-4 h-4 text-amber-400" />
+              Ficha Técnica de Fábrica (Renault Sandero 2013 1.0 Expression)
+            </h3>
+            <p className="text-xs text-neutral-400 mt-0.5 font-sans">
+              Dados oficiais homologados pela montadora para calibração de consumo, autonomia e manutenção de bordo.
+            </p>
+          </div>
+          <span className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/25 rounded-lg text-[10px] font-mono font-bold text-amber-300">
+            Hi-Flex 1.0 16V
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 font-mono text-xs">
+          
+          {/* Motor & Potência */}
+          <div className="bg-neutral-950/80 border border-neutral-800 p-3.5 rounded-xl space-y-1">
+            <span className="text-[10px] text-neutral-500 uppercase tracking-wider block font-bold">Motorização</span>
+            <p className="text-neutral-100 font-bold text-sm">1.0 16V Hi-Flex (D4D)</p>
+            <p className="text-[11px] text-amber-400">77 cv (Etanol) / 76 cv (Gasolina)</p>
+            <p className="text-[10px] text-neutral-400">Torque: 10,1 kgfm @ 4.250 rpm</p>
+          </div>
+
+          {/* Tanque e Capacidade */}
+          <div className="bg-neutral-950/80 border border-neutral-800 p-3.5 rounded-xl space-y-1">
+            <span className="text-[10px] text-neutral-500 uppercase tracking-wider block font-bold">Tanque & Porta-malas</span>
+            <p className="text-neutral-100 font-bold text-sm">50 Litros (Tanque)</p>
+            <p className="text-[11px] text-cyan-400">Porta-malas: 320 Litros</p>
+            <p className="text-[10px] text-neutral-400">Partida a Frio: Reservatório 0.8L</p>
+          </div>
+
+          {/* Consumo Oficial Inmetro/Fábrica */}
+          <div className="bg-neutral-950/80 border border-neutral-800 p-3.5 rounded-xl space-y-1">
+            <span className="text-[10px] text-neutral-500 uppercase tracking-wider block font-bold">Consumo de Fábrica</span>
+            <p className="text-emerald-400 font-bold text-xs">Gasolina: 12,1 km/l (Urb) | 13,0 km/l (Rod)</p>
+            <p className="text-amber-400 font-bold text-xs">Etanol: 8,1 km/l (Urb) | 9,2 km/l (Rod)</p>
+            <p className="text-[10px] text-neutral-400">Autonomia Gasolina Urb: ~605 km</p>
+          </div>
+
+          {/* Pneus e Calibragem */}
+          <div className="bg-neutral-950/80 border border-neutral-800 p-3.5 rounded-xl space-y-1">
+            <span className="text-[10px] text-neutral-500 uppercase tracking-wider block font-bold">Pneus e Pressão</span>
+            <p className="text-neutral-100 font-bold text-sm">185/65 R15</p>
+            <p className="text-[11px] text-cyan-400">Dianteira: 29 PSI | Traseira: 29 PSI</p>
+            <p className="text-[10px] text-neutral-400">Carga Máxima/Rodovia: 32 PSI</p>
+          </div>
+
+        </div>
+      </div>
 
       {/* INSTALAÇÃO PWA / MODO WEB */}
       <div className="mt-8 pt-6 border-t border-neutral-800/80">

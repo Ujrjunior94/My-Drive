@@ -36,27 +36,27 @@ export default function CalendarView({ journeys, settings, onSelectDate, onEditJ
   const daysArray = Array.from({ length: totalDays }, (_, i) => i + 1);
   const paddingDays = Array.from({ length: firstDayIndex }, (_, i) => i);
 
-  // Find journeys for a specific date
-  const getJourneyForDay = (day: number) => {
+  // Find journeys for a specific date (multiple shifts support)
+  const getJourneysForDay = (day: number) => {
     const paddedMonth = String(month + 1).padStart(2, "0");
     const paddedDay = String(day).padStart(2, "0");
     const dateStr = `${year}-${paddedMonth}-${paddedDay}`;
-    return journeys.find((j) => j.date === dateStr);
+    return journeys.filter((j) => j.date === dateStr);
   };
 
   // Get styling based on net profit
-  const getDayStatusColor = (journey: Journey) => {
-    const profit = journey.metrics.netProfit;
+  const getDayStatusColor = (dayJourneys: Journey[]) => {
+    const totalProfit = dayJourneys.reduce((sum, j) => sum + j.metrics.netProfit, 0);
     const target = settings.targetDailyProfit || 250;
 
-    if (profit >= target) {
+    if (totalProfit >= target) {
       // High profit: neon green
       return {
         bg: "bg-emerald-950/40 border-emerald-500/40 text-emerald-300",
         badge: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
         indicator: "bg-emerald-400"
       };
-    } else if (profit >= 100) {
+    } else if (totalProfit >= 100) {
       // Medium profit: electric blue
       return {
         bg: "bg-cyan-950/40 border-cyan-500/40 text-cyan-300",
@@ -155,8 +155,10 @@ export default function CalendarView({ journeys, settings, onSelectDate, onEditJ
         ))}
 
         {daysArray.map((day) => {
-          const journey = getJourneyForDay(day);
-          const status = journey ? getDayStatusColor(journey) : null;
+          const dayJourneys = getJourneysForDay(day);
+          const hasJourneys = dayJourneys.length > 0;
+          const status = hasJourneys ? getDayStatusColor(dayJourneys) : null;
+          const totalProfit = dayJourneys.reduce((sum, j) => sum + j.metrics.netProfit, 0);
           const paddedMonth = String(month + 1).padStart(2, "0");
           const paddedDay = String(day).padStart(2, "0");
           const dayDateStr = `${year}-${paddedMonth}-${paddedDay}`;
@@ -167,8 +169,8 @@ export default function CalendarView({ journeys, settings, onSelectDate, onEditJ
               transition={{ duration: 0.1 }}
               key={`day-${day}`}
               onClick={() => {
-                if (journey) {
-                  onEditJourney(journey);
+                if (hasJourneys) {
+                  onEditJourney(dayJourneys[0]);
                 } else {
                   onSelectDate(dayDateStr);
                 }
@@ -179,16 +181,23 @@ export default function CalendarView({ journeys, settings, onSelectDate, onEditJ
                   : "bg-neutral-950/40 border-neutral-800/80 hover:border-neutral-700 text-neutral-400"
               }`}
             >
-              {/* Day Number */}
-              <span className={`text-xs font-mono font-bold ${status ? "text-neutral-100" : "text-neutral-500 group-hover:text-neutral-300"}`}>
-                {day}
-              </span>
+              {/* Day Number and Multi-Shift Pill */}
+              <div className="flex items-center justify-between w-full">
+                <span className={`text-xs font-mono font-bold ${status ? "text-neutral-100" : "text-neutral-500 group-hover:text-neutral-300"}`}>
+                  {day}
+                </span>
+                {dayJourneys.length > 1 && (
+                  <span className="text-[8px] font-mono font-bold px-1 py-0.2 bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded">
+                    {dayJourneys.length}T
+                  </span>
+                )}
+              </div>
 
               {/* Status Badge & details if logged */}
-              {journey ? (
+              {hasJourneys ? (
                 <div className="flex flex-col items-stretch mt-1">
                   <span className={`text-[9px] py-0.5 px-1 rounded font-bold font-mono text-center overflow-hidden text-ellipsis whitespace-nowrap ${status?.badge}`}>
-                    {new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(journey.metrics.netProfit)}
+                    {new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(totalProfit)}
                   </span>
                   
                   {/* Subtle pulsing glow */}

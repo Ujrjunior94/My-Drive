@@ -585,6 +585,7 @@ export default function App() {
                   isDemo={isDemo}
                   selectedDate={selectedDate}
                   editingJourney={editingJourney}
+                  allJourneys={journeys}
                   settings={settings}
                   onSave={handleSaveJourney}
                   onDelete={handleDeleteJourney}
