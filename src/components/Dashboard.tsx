@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { DollarSign, Trash2, Fuel, TrendingUp, Calendar, Zap, Clock, ShieldAlert, Sparkles, Navigation, Award, Download, Wrench, AlertTriangle, CheckCircle2, Bell, ChevronRight } from "lucide-react";
+import { DollarSign, Trash2, Fuel, TrendingUp, Calendar, Zap, Clock, ShieldAlert, Sparkles, Navigation, Award, Download, Wrench, AlertTriangle, CheckCircle2, Bell, ChevronRight, Car, Gauge } from "lucide-react";
 import { Journey, UserSettings, Maintenance } from "../types";
 import { dbService } from "../lib/dbService";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from "recharts";
@@ -130,6 +130,28 @@ export default function Dashboard({ journeys, settings, loading, userId, isDemo,
   const totalExpenses = journeys.reduce((sum, j) => sum + j.metrics.totalExpenses, 0);
   const totalNet = totalGross - totalExpenses;
   const totalKm = journeys.reduce((sum, j) => sum + j.totalKm, 0);
+
+  // Liters Telemetry Aggregates
+  const totalLitersConsumed = journeys.reduce((sum, j) => {
+    const sLevel = j.startFuelLevel ?? 100;
+    const eLevel = j.endFuelLevel ?? 50;
+    const diffPct = Math.max(0, sLevel - eLevel);
+    return sum + (diffPct / 100) * tankCapacity;
+  }, 0);
+
+  const overallKmL = totalLitersConsumed > 0 ? totalKm / totalLitersConsumed : 0;
+  const isEtanol = settings.fuelType?.toLowerCase().includes("etanol");
+  const factoryKmLTarget = isEtanol ? 8.1 : 12.1; // Renault Sandero 1.0 Factory Inmetro Standard
+  const factoryEfficiencyRatioPct = factoryKmLTarget > 0 && overallKmL > 0
+    ? (overallKmL / factoryKmLTarget) * 100
+    : 0;
+
+  // Latest Fuel Level in Liters from latest registered shift
+  const latestJourney = sortedJourneysList[0];
+  const latestEndFuelPct = latestJourney ? (latestJourney.endFuelLevel ?? 50) : 50;
+  const latestEndFuelLiters = (latestEndFuelPct / 100) * tankCapacity;
+  const missingLitersToFill = Math.max(0, tankCapacity - latestEndFuelLiters);
+  const estimatedAutonomyKm = overallKmL > 0 ? latestEndFuelLiters * overallKmL : latestEndFuelLiters * 11;
   
   // Calculate average daily work hours
   const totalHours = journeys.reduce((sum, j) => {
@@ -382,6 +404,98 @@ export default function Dashboard({ journeys, settings, loading, userId, isDemo,
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* PAINEL DE TELEMETRIA DO TANQUE EM LITROS E EFICIÊNCIA DE FÁBRICA */}
+      {hasData && (
+        <div id="tank-liters-telemetry-panel" className="bg-gradient-to-r from-neutral-900 via-neutral-900 to-neutral-950 border border-amber-500/30 rounded-2xl p-5 shadow-xl space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-neutral-800/80 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl">
+                <Fuel className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-black font-mono tracking-wider uppercase text-amber-400 flex items-center gap-2">
+                  <span>Telemetria do Tanque em Litros & Eficiência de Fábrica</span>
+                  <span className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-mono rounded">
+                    Sandero 2013 1.0 Flex
+                  </span>
+                </h3>
+                <p className="text-[11px] text-neutral-400 mt-0.5">
+                  Análise automatizada baseada na capacidade real de <strong>{tankCapacity} Litros</strong> e na ficha do veículo.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 font-mono text-xs">
+              <span className="text-neutral-400">Eficiência vs. Fábrica Inmetro:</span>
+              <span className={`px-2.5 py-1 rounded-lg font-bold border ${
+                factoryEfficiencyRatioPct >= 90
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                  : factoryEfficiencyRatioPct >= 75
+                  ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                  : "bg-amber-500/20 text-amber-300 border-amber-500/40"
+              }`}>
+                {factoryEfficiencyRatioPct > 0 ? `${factoryEfficiencyRatioPct.toFixed(0)}% de Eficiência` : "Aguardando Registros"}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 font-mono">
+            {/* Combustível em Litros no Tanque */}
+            <div className="bg-neutral-950/80 border border-neutral-800 p-3.5 rounded-xl flex flex-col justify-between">
+              <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-bold">Nível Atual no Tanque</span>
+              <div className="my-1">
+                <span className="text-2xl font-black text-cyan-400">{latestEndFuelLiters.toFixed(1)}</span>
+                <span className="text-xs text-neutral-400 ml-1">/ {tankCapacity} Litros</span>
+              </div>
+              <div className="w-full bg-neutral-800 h-1.5 rounded-full overflow-hidden mt-1">
+                <div
+                  className="bg-cyan-400 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, Math.max(0, (latestEndFuelLiters / tankCapacity) * 100))}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Autonomia Estimada em KM */}
+            <div className="bg-neutral-950/80 border border-neutral-800 p-3.5 rounded-xl flex flex-col justify-between">
+              <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-bold">Autonomia de Bordo</span>
+              <div className="my-1">
+                <span className="text-2xl font-black text-emerald-400">~{estimatedAutonomyKm.toFixed(0)}</span>
+                <span className="text-xs text-neutral-400 ml-1">KM Restantes</span>
+              </div>
+              <span className="text-[10px] text-neutral-400">
+                Calculado com a média de {overallKmL > 0 ? `${overallKmL.toFixed(1)} km/l` : "11 km/l"}
+              </span>
+            </div>
+
+            {/* Volume para Encher o Tanque */}
+            <div className="bg-neutral-950/80 border border-neutral-800 p-3.5 rounded-xl flex flex-col justify-between">
+              <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-bold">Para Encher o Tanque</span>
+              <div className="my-1">
+                <span className="text-2xl font-black text-amber-400">{missingLitersToFill.toFixed(1)}</span>
+                <span className="text-xs text-neutral-400 ml-1">Litros</span>
+              </div>
+              <span className="text-[10px] text-neutral-400">
+                Ocupação atual: {((latestEndFuelLiters / tankCapacity) * 100).toFixed(0)}%
+              </span>
+            </div>
+
+            {/* Consumo Real vs. Inmetro Fábrica */}
+            <div className="bg-neutral-950/80 border border-neutral-800 p-3.5 rounded-xl flex flex-col justify-between">
+              <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-bold">Média Real vs. Fábrica</span>
+              <div className="my-1">
+                <span className="text-2xl font-black text-neutral-100">
+                  {overallKmL > 0 ? overallKmL.toFixed(1) : "-"}
+                </span>
+                <span className="text-xs text-neutral-400 ml-1">km/l (Real)</span>
+              </div>
+              <span className="text-[10px] text-amber-400 font-bold">
+                Padrão Fábrica Inmetro: {factoryKmLTarget} km/l ({isEtanol ? "Etanol" : "Gasolina"})
+              </span>
+            </div>
+          </div>
         </div>
       )}
 
