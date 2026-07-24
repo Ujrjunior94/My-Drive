@@ -67,6 +67,8 @@ export interface UserSettings {
   currency: string; // e.g., BRL
   displayName: string;
   tankCapacityLiters?: number; // e.g., 50 (Litros)
+  customKmL?: number; // Consumo médio calibrado para o computador de bordo (km/L)
+  routeType?: "urban" | "highway" | "mixed"; // Percurso predominante
   vehicleSpecs?: VehicleSpecs;
 }
 

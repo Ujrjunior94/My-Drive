@@ -32,14 +32,20 @@ export default function SettingsPanel({ settings, onSave }: SettingsPanelProps) 
   const [fuelType, setFuelType] = useState(settings.fuelType || "Flex (Etanol/Gasolina)");
   const [currency, setCurrency] = useState(settings.currency || "BRL");
   const [tankCapacityLiters, setTankCapacityLiters] = useState(settings.tankCapacityLiters || 50);
+  const [customKmL, setCustomKmL] = useState<number>(settings.customKmL || 12.1);
+  const [routeType, setRouteType] = useState<"urban" | "highway" | "mixed">(settings.routeType || "mixed");
   const [vehicleSpecs, setVehicleSpecs] = useState<VehicleSpecs | undefined>(
     settings.vehicleSpecs || RENAULT_SANDERO_2013_SPECS
   );
   const [saved, setSaved] = useState(false);
 
+  const calculatedAutonomyKm = (Number(tankCapacityLiters) || 50) * (Number(customKmL) || 12.1);
+
   const handleApplySanderoPreset = () => {
     setTankCapacityLiters(50);
     setFuelType("Flex (Etanol/Gasolina)");
+    setCustomKmL(12.1);
+    setRouteType("mixed");
     setVehicleSpecs(RENAULT_SANDERO_2013_SPECS);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
@@ -55,6 +61,8 @@ export default function SettingsPanel({ settings, onSave }: SettingsPanelProps) 
       fuelType,
       currency,
       tankCapacityLiters: Number(tankCapacityLiters) || 50,
+      customKmL: Number(customKmL) || 12.1,
+      routeType,
       vehicleSpecs
     });
 
@@ -188,6 +196,149 @@ export default function SettingsPanel({ settings, onSave }: SettingsPanelProps) 
             </select>
           </div>
 
+        </div>
+
+        {/* SEÇÃO DE CALIBRAGEM DA AUTONOMIA DO COMPUTADOR DE BORDO */}
+        <div className="mt-6 pt-5 border-t border-neutral-800/80 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-xs font-bold font-mono text-cyan-400 uppercase tracking-widest flex items-center gap-2">
+                <Gauge className="w-4 h-4 text-cyan-400" />
+                Calibragem da Autonomia do Computador de Bordo
+              </h3>
+              <p className="text-[11px] text-neutral-400 mt-0.5">
+                Ajuste o consumo médio de combustível (km/l) para calcular com precisão a autonomia de tanque cheio e de bordo.
+              </p>
+            </div>
+            <span className="px-2.5 py-1 bg-cyan-500/10 border border-cyan-500/30 rounded-lg text-[10px] font-mono font-bold text-cyan-300">
+              ~{calculatedAutonomyKm.toFixed(0)} KM Tanque Cheio
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            
+            {/* Consumo Médio (km/L) */}
+            <div>
+              <label className="block text-xs font-medium text-neutral-400 mb-1.5 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                <Fuel className="w-3.5 h-3.5 text-emerald-400" />
+                Consumo Médio Calibrado (km/L)
+              </label>
+              <div className="relative">
+                <input
+                  id="settings-custom-km-l"
+                  type="number"
+                  required
+                  step="0.1"
+                  min="1"
+                  max="40"
+                  value={customKmL}
+                  onChange={(e) => setCustomKmL(Number(e.target.value))}
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl py-2.5 pl-4 pr-14 text-sm font-mono text-neutral-100 font-bold focus:outline-none focus:border-cyan-500/50"
+                  placeholder="Ex: 12.1"
+                />
+                <span className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-xs font-mono text-neutral-400 font-bold">
+                  km/l
+                </span>
+              </div>
+              <span className="text-[10px] text-neutral-500 mt-1 block font-mono">
+                Base para projeção da autonomia em tempo real.
+              </span>
+            </div>
+
+            {/* Perfil de Percurso Predominante */}
+            <div>
+              <label className="block text-xs font-medium text-neutral-400 mb-1.5 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                <Car className="w-3.5 h-3.5 text-amber-400" />
+                Percurso Predominante
+              </label>
+              <select
+                id="settings-route-type"
+                value={routeType}
+                onChange={(e) => setRouteType(e.target.value as any)}
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl py-2.5 px-4 text-sm text-neutral-200 focus:outline-none focus:border-cyan-500/50 font-sans cursor-pointer"
+              >
+                <option value="urban">Urbano (Cidade / Semáforos)</option>
+                <option value="highway">Rodoviário (Estrada / Pista)</option>
+                <option value="mixed">Misto (Cidade + Estrada)</option>
+              </select>
+              <span className="text-[10px] text-neutral-500 mt-1 block font-mono">
+                Influencia o cálculo de desgaste e autonomia no trânsito.
+              </span>
+            </div>
+
+            {/* Total Autonomia Projetada Card */}
+            <div className="bg-neutral-950/80 border border-neutral-800 p-3.5 rounded-xl flex flex-col justify-between">
+              <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-mono font-bold">
+                Autonomia Total Projetada (Tanque {tankCapacityLiters}L)
+              </span>
+              <div className="my-1 font-mono">
+                <span className="text-2xl font-black text-emerald-400">
+                  {calculatedAutonomyKm.toFixed(0)}
+                </span>
+                <span className="text-xs text-neutral-400 ml-1 font-bold">KM</span>
+              </div>
+              <div className="w-full bg-neutral-800 h-1.5 rounded-full overflow-hidden">
+                <div 
+                  className="bg-emerald-400 h-full rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, (calculatedAutonomyKm / 700) * 100)}%` }}
+                />
+              </div>
+            </div>
+
+          </div>
+
+          {/* Calibragem Rápida - Presets Ficha Sandero 2013 1.0 */}
+          <div className="pt-2">
+            <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-mono font-bold block mb-2">
+              Ajuste Rápido de Consumo / Autonomia (Renault Sandero 2013 1.0)
+            </span>
+            <div className="flex flex-wrap gap-2 font-mono">
+              <button
+                type="button"
+                onClick={() => { setCustomKmL(12.1); setRouteType("urban"); }}
+                className="px-2.5 py-1.5 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 hover:border-cyan-500/40 rounded-lg text-xs text-emerald-400 font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Gasolina Urbana:</span>
+                <span className="text-neutral-100">12,1 km/l (~605 km)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setCustomKmL(13.0); setRouteType("highway"); }}
+                className="px-2.5 py-1.5 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 hover:border-cyan-500/40 rounded-lg text-xs text-cyan-400 font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Gasolina Rodovia:</span>
+                <span className="text-neutral-100">13,0 km/l (~650 km)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setCustomKmL(8.1); setRouteType("urban"); }}
+                className="px-2.5 py-1.5 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 hover:border-amber-500/40 rounded-lg text-xs text-amber-400 font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Etanol Urbano:</span>
+                <span className="text-neutral-100">8,1 km/l (~405 km)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setCustomKmL(9.2); setRouteType("highway"); }}
+                className="px-2.5 py-1.5 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 hover:border-amber-300/40 rounded-lg text-xs text-amber-300 font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Etanol Rodovia:</span>
+                <span className="text-neutral-100">9,2 km/l (~460 km)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setCustomKmL(10.5); setRouteType("mixed"); }}
+                className="px-2.5 py-1.5 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 hover:border-blue-500/40 rounded-lg text-xs text-blue-400 font-bold transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>Misto Real Aplicativo:</span>
+                <span className="text-neutral-100">10,5 km/l (~525 km)</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Form Actions */}

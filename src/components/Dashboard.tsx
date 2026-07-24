@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { DollarSign, Trash2, Fuel, TrendingUp, Calendar, Zap, Clock, ShieldAlert, Sparkles, Navigation, Award, Download, Wrench, AlertTriangle, CheckCircle2, Bell, ChevronRight, Car, Gauge } from "lucide-react";
+import { DollarSign, Trash2, Fuel, TrendingUp, Calendar, Zap, Clock, ShieldAlert, Sparkles, Navigation, Award, Download, Wrench, AlertTriangle, CheckCircle2, Bell, ChevronRight, Car, Gauge, Siren, MapPin, Compass } from "lucide-react";
 import { Journey, UserSettings, Maintenance } from "../types";
 import { dbService } from "../lib/dbService";
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from "recharts";
 import { motion } from "motion/react";
+import FuelGaugeAnimation from "./FuelGaugeAnimation";
+import SOSModal from "./SOSModal";
+import TripPlannerModal from "./TripPlannerModal";
 
 interface DashboardProps {
   journeys: Journey[];
@@ -26,6 +29,8 @@ const Skeleton = ({ className = "h-4 w-full" }: { className?: string }) => (
 export default function Dashboard({ journeys, settings, loading, userId, isDemo, currentOdometer, onNavigateTab }: DashboardProps) {
   const [maintenances, setMaintenances] = useState<Maintenance[]>([]);
   const [maintenancesLoading, setMaintenancesLoading] = useState<boolean>(true);
+  const [isSOSOpen, setIsSOSOpen] = useState<boolean>(false);
+  const [isTripPlannerOpen, setIsTripPlannerOpen] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -151,7 +156,8 @@ export default function Dashboard({ journeys, settings, loading, userId, isDemo,
   const latestEndFuelPct = latestJourney ? (latestJourney.endFuelLevel ?? 50) : 50;
   const latestEndFuelLiters = (latestEndFuelPct / 100) * tankCapacity;
   const missingLitersToFill = Math.max(0, tankCapacity - latestEndFuelLiters);
-  const estimatedAutonomyKm = overallKmL > 0 ? latestEndFuelLiters * overallKmL : latestEndFuelLiters * 11;
+  const effectiveKmL = overallKmL > 0 ? overallKmL : (settings.customKmL || (isEtanol ? 8.1 : 12.1));
+  const estimatedAutonomyKm = latestEndFuelLiters * effectiveKmL;
   
   // Calculate average daily work hours
   const totalHours = journeys.reduce((sum, j) => {
@@ -215,16 +221,27 @@ export default function Dashboard({ journeys, settings, loading, userId, isDemo,
           </p>
         </div>
 
-        {hasData && (
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
           <button
-            onClick={handleExportCSV}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-neutral-950 hover:bg-neutral-900 border border-neutral-800 hover:border-emerald-500/30 text-emerald-400 font-bold rounded-xl text-xs transition-all cursor-pointer shadow-md self-start sm:self-center"
-            title="Download report of all recorded journeys in CSV"
+            onClick={() => setIsTripPlannerOpen(true)}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-neutral-950 font-black rounded-xl text-xs transition-all cursor-pointer shadow-md shadow-cyan-500/10"
+            title="Calcular custo de viagem programada, quilometragem e padrão de velocidade mais econômico"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Exportar Planilha (CSV)</span>
+            <Navigation className="w-3.5 h-3.5" />
+            <span>Viagem Programada (Eco-Drive)</span>
           </button>
-        )}
+
+          {hasData && (
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 bg-neutral-950 hover:bg-neutral-900 border border-neutral-800 hover:border-emerald-500/30 text-emerald-400 font-bold rounded-xl text-xs transition-all cursor-pointer shadow-md"
+              title="Download report of all recorded journeys in CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Exportar CSV</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* VISUAL MAINTENANCE NOTIFICATIONS SYSTEM (OFICINA) */}
@@ -409,93 +426,14 @@ export default function Dashboard({ journeys, settings, loading, userId, isDemo,
 
       {/* PAINEL DE TELEMETRIA DO TANQUE EM LITROS E EFICIÊNCIA DE FÁBRICA */}
       {hasData && (
-        <div id="tank-liters-telemetry-panel" className="bg-gradient-to-r from-neutral-900 via-neutral-900 to-neutral-950 border border-amber-500/30 rounded-2xl p-5 shadow-xl space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-neutral-800/80 pb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl">
-                <Fuel className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-xs font-black font-mono tracking-wider uppercase text-amber-400 flex items-center gap-2">
-                  <span>Telemetria do Tanque em Litros & Eficiência de Fábrica</span>
-                  <span className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-mono rounded">
-                    Sandero 2013 1.0 Flex
-                  </span>
-                </h3>
-                <p className="text-[11px] text-neutral-400 mt-0.5">
-                  Análise automatizada baseada na capacidade real de <strong>{tankCapacity} Litros</strong> e na ficha do veículo.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 font-mono text-xs">
-              <span className="text-neutral-400">Eficiência vs. Fábrica Inmetro:</span>
-              <span className={`px-2.5 py-1 rounded-lg font-bold border ${
-                factoryEfficiencyRatioPct >= 90
-                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                  : factoryEfficiencyRatioPct >= 75
-                  ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
-                  : "bg-amber-500/20 text-amber-300 border-amber-500/40"
-              }`}>
-                {factoryEfficiencyRatioPct > 0 ? `${factoryEfficiencyRatioPct.toFixed(0)}% de Eficiência` : "Aguardando Registros"}
-              </span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 font-mono">
-            {/* Combustível em Litros no Tanque */}
-            <div className="bg-neutral-950/80 border border-neutral-800 p-3.5 rounded-xl flex flex-col justify-between">
-              <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-bold">Nível Atual no Tanque</span>
-              <div className="my-1">
-                <span className="text-2xl font-black text-cyan-400">{latestEndFuelLiters.toFixed(1)}</span>
-                <span className="text-xs text-neutral-400 ml-1">/ {tankCapacity} Litros</span>
-              </div>
-              <div className="w-full bg-neutral-800 h-1.5 rounded-full overflow-hidden mt-1">
-                <div
-                  className="bg-cyan-400 h-full rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, Math.max(0, (latestEndFuelLiters / tankCapacity) * 100))}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Autonomia Estimada em KM */}
-            <div className="bg-neutral-950/80 border border-neutral-800 p-3.5 rounded-xl flex flex-col justify-between">
-              <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-bold">Autonomia de Bordo</span>
-              <div className="my-1">
-                <span className="text-2xl font-black text-emerald-400">~{estimatedAutonomyKm.toFixed(0)}</span>
-                <span className="text-xs text-neutral-400 ml-1">KM Restantes</span>
-              </div>
-              <span className="text-[10px] text-neutral-400">
-                Calculado com a média de {overallKmL > 0 ? `${overallKmL.toFixed(1)} km/l` : "11 km/l"}
-              </span>
-            </div>
-
-            {/* Volume para Encher o Tanque */}
-            <div className="bg-neutral-950/80 border border-neutral-800 p-3.5 rounded-xl flex flex-col justify-between">
-              <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-bold">Para Encher o Tanque</span>
-              <div className="my-1">
-                <span className="text-2xl font-black text-amber-400">{missingLitersToFill.toFixed(1)}</span>
-                <span className="text-xs text-neutral-400 ml-1">Litros</span>
-              </div>
-              <span className="text-[10px] text-neutral-400">
-                Ocupação atual: {((latestEndFuelLiters / tankCapacity) * 100).toFixed(0)}%
-              </span>
-            </div>
-
-            {/* Consumo Real vs. Inmetro Fábrica */}
-            <div className="bg-neutral-950/80 border border-neutral-800 p-3.5 rounded-xl flex flex-col justify-between">
-              <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-bold">Média Real vs. Fábrica</span>
-              <div className="my-1">
-                <span className="text-2xl font-black text-neutral-100">
-                  {overallKmL > 0 ? overallKmL.toFixed(1) : "-"}
-                </span>
-                <span className="text-xs text-neutral-400 ml-1">km/l (Real)</span>
-              </div>
-              <span className="text-[10px] text-amber-400 font-bold">
-                Padrão Fábrica Inmetro: {factoryKmLTarget} km/l ({isEtanol ? "Etanol" : "Gasolina"})
-              </span>
-            </div>
-          </div>
+        <div id="tank-liters-telemetry-panel" className="space-y-4 my-2">
+          <FuelGaugeAnimation
+            currentLiters={latestEndFuelLiters}
+            tankCapacity={tankCapacity}
+            estimatedAutonomyKm={estimatedAutonomyKm}
+            missingLitersToFill={missingLitersToFill}
+            fuelType={settings.fuelType}
+          />
         </div>
       )}
 
@@ -1006,6 +944,31 @@ export default function Dashboard({ journeys, settings, loading, userId, isDemo,
           </p>
         </div>
       )}
+
+      {/* BOTÃO FLUTUANTE DE EMERGÊNCIA 'SOS' */}
+      <div className="fixed bottom-6 right-6 z-40">
+        <motion.button
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setIsSOSOpen(true)}
+          className="relative group bg-gradient-to-r from-red-600 via-red-500 to-amber-600 text-white font-black px-4 py-3 rounded-full shadow-2xl shadow-red-600/50 flex items-center gap-2.5 border-2 border-red-400 cursor-pointer overflow-hidden"
+          title="Sinal SOS, Localização GPS e Atalhos de Emergência"
+        >
+          <span className="absolute inset-0 bg-white/20 animate-ping rounded-full pointer-events-none opacity-40" />
+          <Siren className="w-5 h-5 text-white animate-pulse shrink-0" />
+          <span className="font-mono text-xs uppercase tracking-wider font-extrabold pr-1">SOS</span>
+        </motion.button>
+      </div>
+
+      {/* MODAL DE EMERGÊNCIA SOS */}
+      <SOSModal isOpen={isSOSOpen} onClose={() => setIsSOSOpen(false)} />
+
+      {/* MODAL DE SIMULAÇÃO DE VIAGEM PROGRAMADA & VELOCIDADE ECONÔMICA */}
+      <TripPlannerModal
+        isOpen={isTripPlannerOpen}
+        onClose={() => setIsTripPlannerOpen(false)}
+        settings={settings}
+      />
     </div>
   );
 }

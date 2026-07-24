@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Refuel, UserSettings } from "../types";
 import { dbService } from "../lib/dbService";
-import { Plus, Trash2, Fuel, Calendar, Compass, AlertCircle, Sparkles, Check } from "lucide-react";
+import { Plus, Trash2, Fuel, Calendar, Compass, AlertCircle, Sparkles, Check, Droplets, ArrowUpRight, Calculator, Gauge, ShieldCheck, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 const Skeleton = ({ className = "h-4 w-full" }: { className?: string }) => (
@@ -19,10 +19,23 @@ interface RefuelsViewProps {
   currentOdometer: number;
 }
 
+interface ComputedRefuelMetrics {
+  kmSinceLast: number;
+  spentLiters: number;
+  segmentKmL: number | null;
+  tankBefore: number;
+  tankAfter: number;
+  tankPctAfter: number;
+}
+
 export default function RefuelsView({ userId, isDemo, settings, currentOdometer }: RefuelsViewProps) {
   const [refuels, setRefuels] = useState<Refuel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [showAddForm, setShowAddForm] = useState<boolean>(false);
+  const [lastAddedResult, setLastAddedResult] = useState<{
+    refuel: Refuel;
+    metrics: ComputedRefuelMetrics;
+  } | null>(null);
 
   // Form Fields
   const [date, setDate] = useState<string>("");
@@ -64,6 +77,49 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
     }
   }, [value, liters]);
 
+  // Compute detailed chronological metrics for each refuel
+  const tankCapacity = settings.tankCapacityLiters || 50;
+  const isEtanol = (settings.fuelType || "").toLowerCase().includes("etanol");
+  const effectiveKmL = settings.customKmL || (isEtanol ? 8.1 : 12.1);
+
+  // Sorted list chronologically
+  const sortedRefuels = [...refuels].sort((a, b) => a.odometer - b.odometer || new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const computedMetricsMap = new Map<string, ComputedRefuelMetrics>();
+  let runningTankAfter = 0;
+
+  sortedRefuels.forEach((ref, index) => {
+    if (index === 0) {
+      const tankAfter = Math.min(tankCapacity, ref.liters);
+      runningTankAfter = tankAfter;
+      computedMetricsMap.set(ref.id, {
+        kmSinceLast: 0,
+        spentLiters: 0,
+        segmentKmL: null,
+        tankBefore: 0,
+        tankAfter,
+        tankPctAfter: Math.round((tankAfter / tankCapacity) * 100)
+      });
+    } else {
+      const prevRef = sortedRefuels[index - 1];
+      const kmSinceLast = Math.max(0, ref.odometer - prevRef.odometer);
+      const spentLiters = kmSinceLast > 0 ? kmSinceLast / effectiveKmL : 0;
+      const segmentKmL = ref.liters > 0 && kmSinceLast > 0 ? kmSinceLast / ref.liters : null;
+      const tankBefore = Math.max(0, runningTankAfter - spentLiters);
+      const tankAfter = Math.min(tankCapacity, tankBefore + ref.liters);
+      runningTankAfter = tankAfter;
+
+      computedMetricsMap.set(ref.id, {
+        kmSinceLast,
+        spentLiters,
+        segmentKmL,
+        tankBefore,
+        tankAfter,
+        tankPctAfter: Math.round((tankAfter / tankCapacity) * 100)
+      });
+    }
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!date || !value || !liters || !odometer) {
@@ -85,8 +141,49 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
 
     try {
       await dbService.saveRefuel(userId, newRefuel, isDemo);
-      await loadRefuels();
+      const updatedList = await dbService.getRefuels(userId, isDemo);
+      setRefuels(updatedList);
+
+      // Re-calculate newest refuel metric for pop-up / calculation callout
+      const newSorted = [...updatedList].sort((a, b) => a.odometer - b.odometer || new Date(a.date).getTime() - new Date(b.date).getTime());
+      const newIndex = newSorted.findIndex(r => r.id === newRefuel.id);
       
+      let calcMetric: ComputedRefuelMetrics = {
+        kmSinceLast: 0,
+        spentLiters: 0,
+        segmentKmL: null,
+        tankBefore: 0,
+        tankAfter: Math.min(tankCapacity, newRefuel.liters),
+        tankPctAfter: Math.round((Math.min(tankCapacity, newRefuel.liters) / tankCapacity) * 100)
+      };
+
+      if (newIndex > 0) {
+        const prevRef = newSorted[newIndex - 1];
+        const kmSinceLast = Math.max(0, newRefuel.odometer - prevRef.odometer);
+        const spentLiters = kmSinceLast > 0 ? kmSinceLast / effectiveKmL : 0;
+        const segmentKmL = newRefuel.liters > 0 && kmSinceLast > 0 ? kmSinceLast / newRefuel.liters : null;
+        
+        // Find previous tank after
+        const prevMetric = computedMetricsMap.get(prevRef.id);
+        const prevTankAfter = prevMetric ? prevMetric.tankAfter : 0;
+        const tankBefore = Math.max(0, prevTankAfter - spentLiters);
+        const tankAfter = Math.min(tankCapacity, tankBefore + newRefuel.liters);
+
+        calcMetric = {
+          kmSinceLast,
+          spentLiters,
+          segmentKmL,
+          tankBefore,
+          tankAfter,
+          tankPctAfter: Math.round((tankAfter / tankCapacity) * 100)
+        };
+      }
+
+      setLastAddedResult({
+        refuel: newRefuel,
+        metrics: calcMetric
+      });
+
       // Reset form
       setValue("");
       setLiters("");
@@ -105,6 +202,9 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
       try {
         await dbService.deleteRefuel(userId, id, isDemo);
         await loadRefuels();
+        if (lastAddedResult?.refuel.id === id) {
+          setLastAddedResult(null);
+        }
       } catch (err) {
         console.error(err);
       }
@@ -123,16 +223,17 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
   const totalLiters = refuels.reduce((sum, r) => sum + r.liters, 0);
   const avgPrice = totalLiters > 0 ? totalSpent / totalLiters : 0;
 
+  // Latest calculated tank status
+  const latestSortedRefuel = sortedRefuels.length > 0 ? sortedRefuels[sortedRefuels.length - 1] : null;
+  const latestMetric = latestSortedRefuel ? computedMetricsMap.get(latestSortedRefuel.id) : null;
+
   // Consumption estimation
   let averageConsumption = "N/D";
   if (refuels.length >= 2) {
-    const sorted = [...refuels].sort((a, b) => a.odometer - b.odometer);
-    const firstOdo = sorted[0].odometer;
-    const lastOdo = sorted[sorted.length - 1].odometer;
+    const firstOdo = sortedRefuels[0].odometer;
+    const lastOdo = sortedRefuels[sortedRefuels.length - 1].odometer;
     const totalDist = lastOdo - firstOdo;
-    // Sum of liters except the first or last full tank calculation
-    // Simplified: distance divided by sum of liters consumed in between
-    const totalLit = sorted.slice(0, -1).reduce((sum, r) => sum + r.liters, 0);
+    const totalLit = sortedRefuels.slice(0, -1).reduce((sum, r) => sum + r.liters, 0);
     if (totalDist > 0 && totalLit > 0) {
       averageConsumption = (totalDist / totalLit).toFixed(2) + " km/L";
     }
@@ -145,10 +246,10 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-neutral-900 border border-neutral-800/80 rounded-2xl p-6">
         <div>
           <h2 className="text-lg font-black font-mono tracking-wider text-cyan-400 flex items-center gap-2 uppercase">
-            <Fuel className="w-5 h-5 text-emerald-400 animate-pulse" /> Registro de Abastecimentos
+            <Fuel className="w-5 h-5 text-emerald-400 animate-pulse" /> Registro de Abastecimentos & Telemetria
           </h2>
           <p className="text-xs text-neutral-400 mt-1 font-sans">
-            Gerencie o consumo energético do veículo para auditoria precisa de despesas e autonomia de bordo.
+            Cálculo automático do consumo entre abastecimentos e auditoria do histórico de nível de combustível no tanque.
           </p>
         </div>
 
@@ -171,7 +272,7 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
           >
             <form onSubmit={handleSubmit} className="bg-neutral-900 border border-neutral-800/80 rounded-2xl p-6 space-y-4">
               <span className="text-xs font-mono font-black text-cyan-400 uppercase tracking-widest block mb-1">
-                Lançar Cupom de Combustível
+                Lançar Novo Abastecimento no Tanque
               </span>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -299,7 +400,7 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
                   className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-black text-xs rounded-xl cursor-pointer shadow-md shadow-emerald-500/10 flex items-center gap-1.5"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>Salvar Registro</span>
+                  <span>Calcular e Salvar Abastecimento</span>
                 </button>
               </div>
 
@@ -307,6 +408,91 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* CARD RESULTADO DO CÁLCULO RECENTE (LITROS GASTOS + NOVO TANQUE) */}
+      {lastAddedResult && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-neutral-900 via-neutral-950 to-neutral-900 border-2 border-cyan-500/50 rounded-2xl p-5 shadow-2xl relative overflow-hidden"
+        >
+          <div className="flex items-center justify-between border-b border-neutral-800 pb-3 mb-3">
+            <div className="flex items-center gap-2 text-cyan-400 font-mono font-bold text-xs uppercase tracking-wider">
+              <Calculator className="w-4 h-4 text-emerald-400 animate-pulse" />
+              <span>Resultado do Cálculo de Bordo — Abastecimento Registrado!</span>
+            </div>
+
+            <button
+              onClick={() => setLastAddedResult(null)}
+              className="text-neutral-500 hover:text-neutral-300 text-xs font-mono cursor-pointer"
+            >
+              Fechar
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 font-mono text-xs">
+            {/* Gastos entre abastecimentos */}
+            <div className="bg-neutral-900 p-3 rounded-xl border border-neutral-800">
+              <span className="text-[10px] text-neutral-500 block uppercase font-bold flex items-center gap-1">
+                <Droplets className="w-3 h-3 text-amber-400" />
+                Gasto no Trecho Anter.
+              </span>
+              <span className="text-xl font-black text-amber-400 block my-1">
+                {lastAddedResult.metrics.spentLiters.toFixed(1)} L
+              </span>
+              <span className="text-[9px] text-neutral-400">
+                {lastAddedResult.metrics.kmSinceLast > 0
+                  ? `Em ${lastAddedResult.metrics.kmSinceLast} KM percorridos`
+                  : "Primeiro registro de referência"}
+              </span>
+            </div>
+
+            {/* Consumo Obtido */}
+            <div className="bg-neutral-900 p-3 rounded-xl border border-neutral-800">
+              <span className="text-[10px] text-neutral-500 block uppercase font-bold flex items-center gap-1">
+                <Gauge className="w-3 h-3 text-cyan-400" />
+                Eficiência do Trecho
+              </span>
+              <span className="text-xl font-black text-cyan-400 block my-1">
+                {lastAddedResult.metrics.segmentKmL
+                  ? `${lastAddedResult.metrics.segmentKmL.toFixed(1)} km/L`
+                  : `${effectiveKmL.toFixed(1)} km/L`}
+              </span>
+              <span className="text-[9px] text-neutral-400">
+                {lastAddedResult.metrics.segmentKmL ? "Média real obtida no posto" : "Consumo padrão configurado"}
+              </span>
+            </div>
+
+            {/* O Quanto Está no Tanque Agora */}
+            <div className="bg-neutral-900 p-3 rounded-xl border border-neutral-800">
+              <span className="text-[10px] text-neutral-500 block uppercase font-bold flex items-center gap-1">
+                <Fuel className="w-3 h-3 text-emerald-400" />
+                Tanque Atualizado
+              </span>
+              <span className="text-xl font-black text-emerald-400 block my-1">
+                {lastAddedResult.metrics.tankAfter.toFixed(1)} L
+              </span>
+              <span className="text-[9px] text-neutral-400">
+                {lastAddedResult.metrics.tankPctAfter}% do tanque ({tankCapacity}L max)
+              </span>
+            </div>
+
+            {/* Nova Autonomia */}
+            <div className="bg-neutral-900 p-3 rounded-xl border border-neutral-800">
+              <span className="text-[10px] text-neutral-500 block uppercase font-bold flex items-center gap-1">
+                <ArrowUpRight className="w-3 h-3 text-blue-400" />
+                Nova Autonomia
+              </span>
+              <span className="text-xl font-black text-neutral-100 block my-1">
+                ~{(lastAddedResult.metrics.tankAfter * effectiveKmL).toFixed(0)} KM
+              </span>
+              <span className="text-[9px] text-neutral-400">
+                Sem necessidade de abastecer
+              </span>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Telemetry Summary Widgets */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -317,7 +503,7 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
             <Fuel className="w-5 h-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-[9px] font-mono font-bold text-neutral-500 uppercase tracking-wider block">Gasto de Combustível</span>
+            <span className="text-[9px] font-mono font-bold text-neutral-500 uppercase tracking-wider block">Gasto em Abastecimentos</span>
             {loading ? (
               <Skeleton className="h-6 w-24 mt-1" />
             ) : (
@@ -359,19 +545,21 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
           </div>
         </div>
 
-        {/* Estimated Consumption */}
+        {/* Current Tank Level from History */}
         <div className="bg-neutral-900 border border-neutral-800/70 rounded-2xl p-4 flex items-center gap-4">
           <div className="p-3 bg-emerald-950/30 border border-emerald-500/20 rounded-xl text-emerald-400">
-            <AlertCircle className="w-5 h-5 animate-pulse" />
+            <Zap className="w-5 h-5 animate-pulse" />
           </div>
           <div className="flex-1 min-w-0">
-            <span className="text-[9px] font-mono font-bold text-neutral-500 uppercase tracking-wider block">Consumo Médio</span>
+            <span className="text-[9px] font-mono font-bold text-neutral-500 uppercase tracking-wider block">Tanque Atual no Histórico</span>
             {loading ? (
               <Skeleton className="h-6 w-24 mt-1" />
             ) : (
-              <span className="text-lg font-black font-mono text-emerald-400">{averageConsumption}</span>
+              <span className="text-lg font-black font-mono text-emerald-400">
+                {latestMetric ? `${latestMetric.tankAfter.toFixed(1)} L (${latestMetric.tankPctAfter}%)` : "N/D"}
+              </span>
             )}
-            <span className="text-[9px] text-neutral-500 font-mono block uppercase mt-0.5">Telemetria de Odômetro</span>
+            <span className="text-[9px] text-neutral-500 font-mono block uppercase mt-0.5">Histórico do Último Aporte</span>
           </div>
         </div>
 
@@ -379,9 +567,14 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
 
       {/* History List */}
       <div className="bg-neutral-900 border border-neutral-800/80 rounded-2xl p-6">
-        <h3 className="text-xs font-mono font-bold text-neutral-300 uppercase tracking-widest mb-4">
-          Histórico de Carga de Tanque
-        </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <h3 className="text-xs font-mono font-bold text-neutral-300 uppercase tracking-widest">
+            Histórico do Tanque & Cálculo Entre Abastecimentos
+          </h3>
+          <span className="text-[10px] font-mono text-neutral-500">
+            Cálculos baseados em {tankCapacity}L e consumo de {effectiveKmL} km/L
+          </span>
+        </div>
 
         {loading ? (
           <div className="overflow-x-auto">
@@ -390,10 +583,11 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
                 <tr className="border-b border-neutral-800/60 text-neutral-500 text-[10px] uppercase tracking-wider">
                   <th className="pb-3 font-bold">Data</th>
                   <th className="pb-3 font-bold">Posto</th>
-                  <th className="pb-3 font-bold text-right">Combustível</th>
                   <th className="pb-3 font-bold text-right">Odômetro</th>
-                  <th className="pb-3 font-bold text-right">Litros</th>
-                  <th className="pb-3 font-bold text-right">Preço/L</th>
+                  <th className="pb-3 font-bold text-right">Km no Trecho</th>
+                  <th className="pb-3 font-bold text-right">Litros Gastos</th>
+                  <th className="pb-3 font-bold text-right">Novo Aporte</th>
+                  <th className="pb-3 font-bold text-right">No Tanque</th>
                   <th className="pb-3 font-bold text-right">Custo Total</th>
                   <th className="pb-3 text-center">Ações</th>
                 </tr>
@@ -404,7 +598,8 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
                     <td className="py-4"><Skeleton className="h-4 w-16" /></td>
                     <td className="py-4"><Skeleton className="h-4 w-28" /></td>
                     <td className="py-4 text-right"><Skeleton className="h-4 w-16 ml-auto" /></td>
-                    <td className="py-4 text-right"><Skeleton className="h-4 w-20 ml-auto" /></td>
+                    <td className="py-4 text-right"><Skeleton className="h-4 w-16 ml-auto" /></td>
+                    <td className="py-4 text-right"><Skeleton className="h-4 w-16 ml-auto" /></td>
                     <td className="py-4 text-right"><Skeleton className="h-4 w-12 ml-auto" /></td>
                     <td className="py-4 text-right"><Skeleton className="h-4 w-14 ml-auto" /></td>
                     <td className="py-4 text-right"><Skeleton className="h-4 w-16 ml-auto" /></td>
@@ -424,39 +619,64 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
               <thead>
                 <tr className="border-b border-neutral-800/60 text-neutral-500 text-[10px] uppercase tracking-wider">
                   <th className="pb-3 font-bold">Data</th>
-                  <th className="pb-3 font-bold">Posto</th>
-                  <th className="pb-3 font-bold text-right">Combustível</th>
+                  <th className="pb-3 font-bold">Posto / Tipo</th>
                   <th className="pb-3 font-bold text-right">Odômetro</th>
-                  <th className="pb-3 font-bold text-right">Litros</th>
-                  <th className="pb-3 font-bold text-right">Preço/L</th>
+                  <th className="pb-3 font-bold text-right">Km Rodados</th>
+                  <th className="pb-3 font-bold text-right">Litros Gastos</th>
+                  <th className="pb-3 font-bold text-right">Novo Aporte</th>
+                  <th className="pb-3 font-bold text-right">No Tanque Pós</th>
                   <th className="pb-3 font-bold text-right">Custo Total</th>
-                  <th className="pb-3 pb-3 text-center">Ações</th>
+                  <th className="pb-3 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800/40">
-                {refuels.map((ref) => (
-                  <tr key={ref.id} className="hover:bg-neutral-850/40 transition-colors">
-                    <td className="py-3 text-neutral-300 font-bold flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-neutral-500" />
-                      {ref.date.split("-").reverse().join("/")}
-                    </td>
-                    <td className="py-3 text-neutral-400 max-w-[150px] truncate">{ref.stationName}</td>
-                    <td className="py-3 text-right text-emerald-400 font-bold">{ref.fuelType}</td>
-                    <td className="py-3 text-right text-neutral-300 font-semibold">{ref.odometer} KM</td>
-                    <td className="py-3 text-right text-neutral-300">{ref.liters.toFixed(2)} L</td>
-                    <td className="py-3 text-right text-neutral-500">{formatCurrency(ref.pricePerLiter)}</td>
-                    <td className="py-3 text-right text-neutral-200 font-black">{formatCurrency(ref.value)}</td>
-                    <td className="py-3 text-center">
-                      <button
-                        onClick={() => handleDelete(ref.id)}
-                        className="p-1.5 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all cursor-pointer"
-                        title="Excluir abastecimento"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {refuels.map((ref) => {
+                  const m = computedMetricsMap.get(ref.id);
+                  return (
+                    <tr key={ref.id} className="hover:bg-neutral-850/40 transition-colors">
+                      <td className="py-3 text-neutral-300 font-bold flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-neutral-500" />
+                        {ref.date.split("-").reverse().join("/")}
+                      </td>
+                      <td className="py-3 text-neutral-400 max-w-[150px] truncate">
+                        <div>{ref.stationName}</div>
+                        <div className="text-[10px] text-emerald-400 font-bold">{ref.fuelType}</div>
+                      </td>
+                      <td className="py-3 text-right text-neutral-300 font-semibold">{ref.odometer} KM</td>
+                      
+                      {/* Km Rodados entre Abastecimentos */}
+                      <td className="py-3 text-right text-cyan-400 font-bold">
+                        {m && m.kmSinceLast > 0 ? `+${m.kmSinceLast} KM` : "Ref. Inicial"}
+                      </td>
+
+                      {/* Litros Gastos no Trecho */}
+                      <td className="py-3 text-right text-amber-400 font-bold">
+                        {m && m.spentLiters > 0 ? `${m.spentLiters.toFixed(1)} L` : "-"}
+                      </td>
+
+                      {/* Novo Aporte (Litros Abastecidos) */}
+                      <td className="py-3 text-right text-emerald-400 font-bold">
+                        +{ref.liters.toFixed(1)} L
+                      </td>
+
+                      {/* No Tanque Pós-Abastecimento */}
+                      <td className="py-3 text-right font-black text-neutral-100">
+                        {m ? `${m.tankAfter.toFixed(1)} L (${m.tankPctAfter}%)` : `${ref.liters.toFixed(1)} L`}
+                      </td>
+
+                      <td className="py-3 text-right text-neutral-200 font-black">{formatCurrency(ref.value)}</td>
+                      <td className="py-3 text-center">
+                        <button
+                          onClick={() => handleDelete(ref.id)}
+                          className="p-1.5 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all cursor-pointer"
+                          title="Excluir abastecimento"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -466,3 +686,4 @@ export default function RefuelsView({ userId, isDemo, settings, currentOdometer 
     </div>
   );
 }
+
